@@ -79,6 +79,7 @@ footer{margin-top:22px;color:var(--muted);font-size:.75rem}
       <button data-sub="eq">Equipos</button>
     </div>
     <div class="controles" id="controles"></div>
+    <p class="nota" id="linea-ayuda" style="margin:6px 0 4px">Línea: ordena a los jugadores (el 7/8 de la lista = partidos que la superan) y marca las barras. Cámbiala con − y +.</p>
     <div class="linea" id="linea-caja">
       <button type="button" id="menos" aria-label="Bajar la línea">−</button>
       <input type="number" id="linea" step="0.5" min="0" inputmode="decimal" aria-label="Línea">
@@ -200,7 +201,12 @@ const ordenPorPorcentaje = (grupos, linea) => grupos.filter(g => g.v.length).map
   .sort((x, y) => (y.a / y.m) - (x.a / x.m) || y.m - x.m || y.med - x.med);
 const etqOrden = o => ({v: o.k, t: `${o.t} · ${o.a}/${o.m} (${Math.round(100 * o.a / o.m)}%)`});
 const elegido = (id, lista, def) => { const x = val(id); return lista.some(y => String(y) === String(x)) ? x : (def !== undefined ? def : lista[0]); };
-const lineaOrden = () => { const x = Number(String(val("lorden")).replace(",", ".")); return val("lorden") === undefined || !isFinite(x) ? 0.5 : x; };
+// UNA sola linea por estadistica en las pestanas de jugadores: ordena a los jugadores del equipo (% de partidos que la superan) y marca las barras
+const LINEA_DEF = {"Remates": 1.5, "Remates a puerta": 0.5, "Entradas": 1.5, "Faltas cometidas": 1.5, "Faltas recibidas": 1.5, "Tarjeta amarilla": 0.5,
+  "Tarjeta (amarilla o roja, sí/no)": 0.5, "Goles": 0.5, "Asistencias": 0.5, "Goles + asistencias": 0.5, "Pases clave": 0.5, "Intercepciones": 0.5, "Despejes": 1.5, "Pases": 25.5,
+  "Puntos": 15.5, "Rebotes": 5.5, "Triples": 1.5, "Puntos + Rebotes": 20.5, "Puntos + Asistencias": 18.5, "Rebotes + Asistencias": 8.5, "Puntos + Rebotes + Asistencias": 25.5,
+  "Robos": 0.5, "Tapones": 0.5};
+const lineaOrden = stat => { const g = val("l_" + stat), x = Number(String(g).replace(",", ".")); return g === undefined || !isFinite(x) ? (LINEA_DEF[stat] !== undefined ? LINEA_DEF[stat] : 0.5) : x; };
 
 // ---- controles ---------------------------------------------------------------------------------------------------------
 // Equipo -> jugador: se elige primero el equipo y dentro de el, el jugador (por defecto, el que mas remates / puntos tiene)
@@ -220,7 +226,7 @@ function defsControles() {
       if (nSel !== "Todos") d = d.slice(-Number(nSel));
       return {k: nombre, t: nombre, v: d.map(r => r[STATS[stat]])};
     });
-    const orden = ordenPorPorcentaje(grupos, lineaOrden());
+    const orden = ordenPorPorcentaje(grupos, lineaOrden(stat));
     elegir("jugador", orden.map(o => o.k));
     o.push({id: "equipo", label: "Equipo", opciones: equipos, ancho: true, redibuja: true});
     o.push({id: "stat", label: "Estadística", opciones: Object.keys(STATS), ancho: true, redibuja: "mantener"});
@@ -228,8 +234,7 @@ function defsControles() {
     o.push({id: "n", label: "Partidos", opciones: NS, def: "Todos", redibuja: "mantener"});
     o.push({id: "sede", label: "Dónde juega", opciones: SEDES, redibuja: "mantener"});
     o.push({id: "part", label: "Participación", opciones: ["Todos", "Titular"], redibuja: "mantener"});
-    o.push({id: "lorden", label: "Línea orden", tipo: "num", def: 0.5, fila2: true, redibuja: "mantener"});
-    o.push({id: "jugador", label: "Jugador (% que supera la línea)", opciones: orden.map(etqOrden), fila2: true, flex: 3});
+    o.push({id: "jugador", label: "Jugador · partidos que superan la línea", opciones: orden.map(etqOrden), fila2: true});
   } else if (dep === "futbol") {
     const eqs = unicos(L.FE, x => x.equipo).sort(alfa), eqSel = elegido("equipo", eqs);
     o.push({id: "equipo", label: "Equipo", opciones: eqs, ancho: true, redibuja: "mantener"});
@@ -251,7 +256,7 @@ function defsControles() {
       if (nSel !== "Todos") d = d.slice(-Number(nSel));
       return {k: String(pid), t: ult.get(pid).jugador, v: d.map(r => STATS_NJ[stat].reduce((s2, c) => s2 + r[c], 0))};
     });
-    const orden = ordenPorPorcentaje(grupos, lineaOrden());
+    const orden = ordenPorPorcentaje(grupos, lineaOrden(stat));
     elegir("jugador", orden.map(x => x.k));
     o.push({id: "equipo", label: "Equipo", opciones: abrevs.map(a => ({v: a, t: NOMBRE_NBA.get(a) || a})), ancho: true, redibuja: true});
     o.push({id: "stat", label: "Estadística", opciones: Object.keys(STATS_NJ), ancho: true, redibuja: "mantener"});
@@ -260,8 +265,7 @@ function defsControles() {
     o.push({id: "n", label: "Partidos", opciones: NS, def: "Todos", redibuja: "mantener"});
     o.push({id: "sede", label: "Dónde juega", opciones: SEDES, redibuja: "mantener"});
     if (fases.length > 1) o.push({id: "fase", label: "Fase", opciones: ["Todas", ...fases], redibuja: "mantener"});
-    o.push({id: "lorden", label: "Línea orden", tipo: "num", def: 0.5, fila2: true, redibuja: "mantener"});
-    o.push({id: "jugador", label: "Jugador (% que supera la línea)", opciones: orden.map(etqOrden), fila2: true, flex: 3});
+    o.push({id: "jugador", label: "Jugador · partidos que superan la línea", opciones: orden.map(etqOrden), fila2: true});
   } else {
     const eq = new Map(), NES = neSel(); NE.forEach(r => eq.set(String(r.tid), r.nombre));
     const ids = [...eq.keys()].sort((a, b) => alfa(eq.get(a), eq.get(b))), tidSel = elegido("equipo", ids);
@@ -375,7 +379,7 @@ function especificacion(filas, tituloValor, linea) {
   for (let t = 0; t <= tope; t += paso) marcas.push(t);
   const tam = n <= 12 ? 14 : (n <= 20 ? 12 : 10);                             // nombre del rival mas grande cuando hay pocas barras
   const esFuera = `indexof(${JSON.stringify(fuera)}, datum.value) >= 0`;
-  const ejeX = {title: null, labelAngle: n > 20 ? -90 : ((n > 5 || (n > 3 && Math.max(...etqs.map(e => e.length)) > 9)) ? -50 : 0), labelLimit: 130, labelOverlap: false, ticks: false, domain: false, labelFontSize: tam,
+  const ejeX = {title: null, labelAngle: n > 3 ? -90 : 0, labelLimit: 130, labelOverlap: n > 30 ? "parity" : false, ticks: false, domain: false, labelFontSize: tam,
     labelColor: mezcla ? {condition: {test: esFuera, value: css("--fuera")}, value: muted} : muted,
     labelFontWeight: mezcla ? {condition: {test: esFuera, value: 700}, value: 400} : 400};
   const barras = {mark: {type: "bar", cornerRadiusTopLeft: 3, cornerRadiusTopRight: 3}, encoding: {
@@ -443,8 +447,9 @@ function actualizar() {
   const {filas, sujeto, stat} = ultimo, kl = `${clave()}|${sujeto}|${stat}`;
   if (filas.length) {
     const guardada = ST.lineas[kl];
-    $("#linea").value = guardada !== undefined ? guardada : lineaDefecto(filas.map(f => f.valor));
+    $("#linea").value = ST.sub === "jug" ? lineaOrden(stat) : (guardada !== undefined ? guardada : lineaDefecto(filas.map(f => f.valor)));
   }
+  $("#linea-ayuda").style.display = ST.sub === "jug" ? "" : "none";
   ultimo.kl = kl;
   pintar();
 }
@@ -452,6 +457,7 @@ function actualizar() {
 function cambiarLinea(v) {
   v = Math.max(0, Math.round(v * 2) / 2);
   $("#linea").value = v;
+  if (ultimo && ST.sub === "jug") { poner("l_" + ultimo.stat, v); guardar(); dibujarControles(); actualizar(); return; }      // la linea tambien reordena a los jugadores
   if (ultimo) { ST.lineas[ultimo.kl] = v; guardar(); }
   pintar();
 }
