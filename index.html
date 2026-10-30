@@ -498,5 +498,20 @@ if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEven
 try { if (window.Telegram && Telegram.WebApp) { Telegram.WebApp.ready(); Telegram.WebApp.expand(); } } catch (e) {}
 cambiarVista();
 </script>
+<script>
+// Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
+// y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
+(async () => {
+  const BUILD = "20261030125722";
+  if (!/^\d{8,}$/.test(BUILD)) return;
+  try {
+    const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
+    if (j.b && j.b !== BUILD) {
+      const u = new URL(location.href);
+      if (u.searchParams.get("v") !== j.b) { u.searchParams.set("v", j.b); location.replace(u.toString()); }
+    }
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>
