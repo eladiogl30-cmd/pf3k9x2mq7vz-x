@@ -198,7 +198,8 @@ const STATS_FE = {
   "Faltas cometidas": d => d.faltas, "Faltas del rival": d => d.faltas_r, "Faltas totales del partido": d => d.faltas + d.faltas_r,
   "Tarjetas amarillas": d => d.amar, "Tarjetas amarillas del rival": d => d.amar_r,
   "Tarjetas totales del partido (amarillas + rojas)": d => d.amar + d.rojas + d.amar_r + d.rojas_r, "Entradas": d => d.entradas,
-  "Córners": d => d.cor, "Córners del rival": d => d.cor_r, "Córners totales del partido": d => d.cor + d.cor_r};
+  "Córners": d => d.cor, "Córners del rival": d => d.cor_r, "Córners totales del partido": d => d.cor + d.cor_r,
+  "Ambos marcan (sí/no)": d => (d.gf > 0 && d.gc > 0) ? 1 : 0, "Portería a cero (sí/no)": d => d.gc === 0 ? 1 : 0};
 const STATS_NJ = {"Puntos": ["pts"], "Rebotes": ["reb"], "Asistencias": ["ast"], "Triples": ["fg3"], "Puntos + Rebotes": ["pts", "reb"],
   "Puntos + Asistencias": ["pts", "ast"], "Rebotes + Asistencias": ["reb", "ast"], "Puntos + Rebotes + Asistencias": ["pts", "reb", "ast"],
   "Robos": ["stl"], "Tapones": ["blk"]};
@@ -517,7 +518,7 @@ function actualizar() {
   const {filas, sujeto, stat} = ultimo, kl = `${clave()}|${sujeto}|${stat}`;
   if (filas.length) {
     const guardada = ST.lineas[kl];
-    $("#linea").value = ST.sub === "jug" ? lineaOrden(stat) : (guardada !== undefined ? guardada : lineaDefecto(filas.map(f => f.valor)));
+    $("#linea").value = ST.sub === "jug" ? lineaOrden(stat) : (guardada !== undefined ? guardada : (/sí\/no/.test(stat) ? 0.5 : lineaDefecto(filas.map(f => f.valor))));
   }
   $("#linea-ayuda").style.display = ST.sub === "jug" ? "" : "none";
   ultimo.kl = kl;
@@ -771,7 +772,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261031103846";
+  const BUILD = "20261031111722";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
