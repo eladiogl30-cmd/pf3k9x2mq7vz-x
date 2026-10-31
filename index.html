@@ -65,6 +65,29 @@ h2{font-size:1.25rem;line-height:1.25;margin:10px 0 6px;font-weight:600}
 .escudos .ec b{font-weight:700;letter-spacing:-.2px}
 .escudos .ec i{font-style:normal;color:var(--muted);letter-spacing:-.3px}
 .escudos .ec img{display:block;margin-top:2px;object-fit:contain}
+.cmp-fila{display:flex;gap:8px;margin-bottom:6px}
+.cmp-fila label{flex:1 1 0;min-width:0}
+.cmp-fila label.cmp-sede{flex:0 0 38%}
+.cmp-vs{text-align:center;color:var(--muted);font-size:.85rem;margin:2px 0 6px}
+button.buscar{width:100%;height:46px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-size:1.05rem;font-weight:600;cursor:pointer;margin:8px 0 6px}
+.cmp-cab{display:flex;gap:10px;margin:12px 0 4px}
+.cmp-eq{flex:1 1 0;min-width:0;background:var(--card);border-radius:10px;padding:10px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:2px}
+.cmp-eq img{width:34px;height:34px;object-fit:contain}
+.cmp-eq small{color:var(--muted);font-size:.78rem}
+.cmp-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+@media (min-width:640px){.cmp-cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.cmp-col{background:var(--card);border-radius:10px;padding:10px 12px}
+.cmp-col h3{margin:0 0 6px;font-size:1rem}.cmp-col h3 small{color:var(--muted);font-weight:400}
+.cmp-col h4{margin:10px 0 4px;font-size:.9rem;color:var(--muted);font-weight:600}
+.dest{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--line);font-size:.92rem}
+.dest:first-of-type{border-top:0}
+.dest b{white-space:nowrap;color:var(--ok)}
+.cmp-tabla{width:100%;border-collapse:collapse;font-size:.9rem;margin:6px 0}
+.cmp-tabla th{text-align:center;font-size:.8rem;color:var(--muted);font-weight:600;padding:4px 2px}
+.cmp-tabla th:first-child,.cmp-tabla td:first-child{text-align:left}
+.cmp-tabla td{padding:6px 2px;border-top:1px solid var(--line);text-align:center}
+.cmp-tabla td b{display:block;line-height:1.1}.cmp-tabla td small{color:var(--muted);font-size:.72rem}
+.cmp-tabla td.alto b{color:var(--ok)}.cmp-tabla td.bajo b{color:var(--muted);font-weight:400}
 footer{margin-top:22px;color:var(--muted);font-size:.75rem}
 </style>
 </head>
@@ -82,7 +105,9 @@ footer{margin-top:22px;color:var(--muted);font-size:.75rem}
     <div class="tabs" id="tabs">
       <button data-sub="jug" class="act">Jugadores</button>
       <button data-sub="eq">Equipos</button>
+      <button data-sub="cmp">Comparar</button>
     </div>
+    <div id="cuerpo">
     <div class="controles" id="controles"></div>
     <p class="nota" id="linea-ayuda" style="margin:6px 0 4px">Línea: ordena a los jugadores (el 7/8 de la lista = partidos que la superan) y marca las barras. Cámbiala con − y +.</p>
     <div class="linea" id="linea-caja">
@@ -95,6 +120,8 @@ footer{margin-top:22px;color:var(--muted);font-size:.75rem}
     <div class="tarjetas" id="tarjetas"></div>
     <p class="nota leyenda" id="leyenda">barra <b style="background:var(--ok)"></b>supera la línea · <b style="background:var(--bad)"></b>no la supera · <b style="background:var(--gris)"></b>empata<span id="ley-fuera"> · 🏠 casa · ✈️ fuera (rival en <span style="color:var(--fuera);font-weight:700">morado</span>)</span></p>
     <p class="nota" id="notas"></p>
+    </div>
+    <div id="comparador" style="display:none"></div>
   </div>
   <footer id="pie"></footer>
 </main>
@@ -515,6 +542,8 @@ function cabecera() {
     : `Temporada ${B.temporada} · partidos hasta el ${B.hasta}`;
   $("#pie").textContent = `Datos generados el ${DATOS.generado}. Solo informativo.`;
   document.querySelectorAll('input[name="dep"]').forEach(r => r.checked = r.value === ST.dep);
+  if (!futbol && ST.sub === "cmp") ST.sub = "jug";                                    // el comparador solo existe en futbol
+  $("#tabs button[data-sub=cmp]").style.display = futbol ? "" : "none";
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("act", b.dataset.sub === ST.sub));
   const caja = $("#ligas");
   caja.style.display = futbol ? "" : "none";
@@ -527,7 +556,115 @@ function cambiarVista() {
   $("#panel").style.display = sinDatos ? "none" : "";
   $("#sindatos").style.display = sinDatos ? "" : "none";
   if (sinDatos) { $("#sindatos").textContent = `Aún no hay datos de ${ST.liga}. Cuando se carguen aparecerán aquí.`; guardar(); return; }
+  const cmp = ST.dep === "futbol" && ST.sub === "cmp";
+  $("#cuerpo").style.display = cmp ? "none" : ""; $("#comparador").style.display = cmp ? "" : "none";
+  if (cmp) { dibujarComparador(); guardar(); return; }
   dibujarControles(); actualizar(); guardar();
+}
+
+// ---- comparador de equipos (solo futbol) -------------------------------------------------------------------------------------
+// Eliges dos equipos de la liga y, para cada uno, si cuentan sus partidos de casa, de fuera o todos. Al buscar sale, con los partidos de esta temporada, el porcentaje de veces que
+// ha pasado cada cosa (ambos marcan, goles, corners, remates, tarjetas...) y los "destacados": lo que ha pasado casi siempre (>= 80 %) en cada equipo y en sus jugadores.
+const UMBRAL = 0.8, MIN_PART = 5;
+const tasa = (arr, f) => { let k = 0, n = 0; for (const r of arr) { const v = f(r); if (v === null || v === undefined) continue; n++; if (v) k++; } return {k, n}; };
+const pct = t => t.n ? Math.round(100 * t.k / t.n) : null;
+const fmtT = t => t.n ? `${t.k}/${t.n}` : "–";
+const sobre = (g, linea) => r => { const x = g(r); return Number.isFinite(x) ? x > linea : null; };
+const bajo = (g, linea) => r => { const x = g(r); return Number.isFinite(x) ? x < linea : null; };
+const rango = (a, b) => { const o = []; for (let x = a; x <= b + 1e-9; x += 1) o.push(x); return o; };
+
+// estadisticas de equipo para los destacados: nombre, como leerla de un partido (r = fila de L.FE) y las lineas a probar
+const EST_EQ = [
+  {t: "córners", g: r => r.cor, ls: rango(1.5, 12.5)}, {t: "córners en contra", g: r => r.cor_r, ls: rango(1.5, 12.5)}, {t: "córners del partido", g: r => r.cor + r.cor_r, ls: rango(5.5, 14.5)},
+  {t: "goles", g: r => r.gf, ls: [1.5, 2.5]}, {t: "goles en contra", g: r => r.gc, ls: [1.5, 2.5]}, {t: "goles del partido", g: r => r.gf + r.gc, ls: [1.5, 2.5, 3.5, 4.5]},
+  {t: "remates", g: r => r.tiros, ls: rango(4.5, 20.5)}, {t: "remates a puerta", g: r => r.sot, ls: rango(1.5, 10.5)}, {t: "faltas", g: r => r.faltas, ls: rango(6.5, 20.5)},
+  {t: "tarjetas amarillas del partido", g: r => r.amar + r.amar_r, ls: rango(0.5, 6.5)}];
+const SI_NO = [
+  {si: "ambos marcan", no: "no marcan los dos", f: r => r.gf > 0 && r.gc > 0}, {si: "marca gol", no: "no marca gol", f: r => r.gf > 0}, {si: "deja la portería a cero", no: "encaja gol", f: r => r.gc === 0}];
+// estadisticas de jugador (L.FJ)
+const EST_JUG = [{t: "remates", g: r => r.tiros}, {t: "remates a puerta", g: r => r.sot}, {t: "faltas cometidas", g: r => r.faltas}, {t: "faltas recibidas", g: r => r.frec}, {t: "entradas", g: r => r.entradas}];
+const TABLA = [
+  ["Ambos marcan", [["", r => r.gf > 0 && r.gc > 0]]],
+  ["Goles del partido", [[1.5, sobre(r => r.gf + r.gc, 1.5)], [2.5, sobre(r => r.gf + r.gc, 2.5)], [3.5, sobre(r => r.gf + r.gc, 3.5)]]],
+  ["Marca gol", [["", r => r.gf > 0]]], ["Portería a cero", [["", r => r.gc === 0]]],
+  ["Córners del partido", [[8.5, sobre(r => r.cor + r.cor_r, 8.5)], [9.5, sobre(r => r.cor + r.cor_r, 9.5)], [10.5, sobre(r => r.cor + r.cor_r, 10.5)]]],
+  ["Córners del equipo", [[4.5, sobre(r => r.cor, 4.5)], [5.5, sobre(r => r.cor, 5.5)], [6.5, sobre(r => r.cor, 6.5)]]],
+  ["Remates del equipo", [[10.5, sobre(r => r.tiros, 10.5)], [12.5, sobre(r => r.tiros, 12.5)]]],
+  ["Remates a puerta del equipo", [[3.5, sobre(r => r.sot, 3.5)], [4.5, sobre(r => r.sot, 4.5)]]],
+  ["Tarjetas amarillas del partido", [[3.5, sobre(r => r.amar + r.amar_r, 3.5)], [4.5, sobre(r => r.amar + r.amar_r, 4.5)]]]];
+
+const textoSede = s => s === "Casa" ? "en casa" : s === "Fuera" ? "fuera" : "casa y fuera";
+const escudoEq = n => ((DATOS.escudos || {}).futbol || {})[n] || "";
+const pctTxt = t => t.n ? `${pct(t)}%` : "–";
+const celda = t => `<td class="${t.n >= MIN_PART && t.k / t.n >= UMBRAL ? "alto" : (t.n && t.k / t.n <= 0.2 ? "bajo" : "")}"><b>${pctTxt(t)}</b><small>${fmtT(t)}</small></td>`;
+
+// destacados de un equipo: lo que ha pasado en >= 80 % de sus partidos (la linea mas exigente que aun lo cumple)
+function destacadosEquipo(filas) {
+  const out = [];
+  if (filas.length < MIN_PART) return out;
+  for (const s of SI_NO) { const t = tasa(filas, s.f); if (t.n >= MIN_PART) { if (t.k / t.n >= UMBRAL) out.push({txt: s.si, t}); else if (1 - t.k / t.n >= UMBRAL) out.push({txt: s.no, t: {k: t.n - t.k, n: t.n}}); } }
+  for (const e of EST_EQ) {
+    let mejor = null;
+    for (const l of e.ls) { const t = tasa(filas, sobre(e.g, l)); if (t.n >= MIN_PART && t.k / t.n >= UMBRAL) mejor = {txt: `más de ${coma(l)} ${e.t}`, t}; }
+    if (!mejor) for (const l of [...e.ls].reverse()) { const t = tasa(filas, bajo(e.g, l)); if (t.n >= MIN_PART && t.k / t.n >= UMBRAL) mejor = {txt: `menos de ${coma(l)} ${e.t}`, t}; }
+    if (mejor) out.push(mejor);
+  }
+  return out.sort((a, b) => b.t.k / b.t.n - a.t.k / a.t.n || b.t.n - a.t.n).slice(0, 8);
+}
+
+// destacados de jugadores del equipo (partidos que jugo, con el filtro de casa/fuera)
+function destacadosJugadores(L, equipo, sede) {
+  const por = new Map();
+  for (const r of filtrarSede(L.FJ.filter(x => x.equipo === equipo && x.jugo === 1), sede)) { if (!por.has(r.jugador)) por.set(r.jugador, []); por.get(r.jugador).push(r); }
+  const out = [];
+  for (const [nombre, filas] of por) {
+    if (filas.length < MIN_PART) continue;
+    for (const e of EST_JUG) {
+      let mejor = null;
+      for (const l of [0.5, 1.5, 2.5, 3.5, 4.5]) { const t = tasa(filas, sobre(e.g, l)); if (t.n >= MIN_PART && t.k / t.n >= UMBRAL) mejor = {nombre, txt: `más de ${coma(l)} ${e.t}`, t, l}; }
+      if (mejor) out.push(mejor);
+    }
+  }
+  return out.sort((a, b) => b.t.k / b.t.n - a.t.k / a.t.n || b.l - a.l || b.t.n - a.t.n).slice(0, 8);
+}
+
+function dibujarComparador() {
+  const L = ligaFutbol(ST.liga), caja = $("#comparador");
+  const eqs = unicos(L.FE, x => x.equipo).sort(alfa);
+  const a = elegido("ca", eqs, eqs[0]), b = elegido("cb", eqs.filter(x => x !== a), eqs.find(x => x !== a));
+  const sa = elegido("csa", SEDES, "Casa"), sb = elegido("csb", SEDES, "Fuera");
+  poner("ca", a); poner("cb", b); poner("csa", sa); poner("csb", sb);
+  const opts = (lista, sel) => lista.map(x => `<option value="${esc(x)}"${x === sel ? " selected" : ""}>${esc(x)}</option>`).join("");
+  caja.innerHTML = `
+    <p class="nota">Elige dos equipos y dónde juega cada uno. Al buscar, ves en qué porcentaje de sus partidos ha pasado cada cosa y lo que ha pasado casi siempre.</p>
+    <div class="cmp-fila"><label class="c"><span>Equipo 1</span><select id="cmp_a">${opts(eqs, a)}</select></label><label class="c cmp-sede"><span>Dónde juega</span><select id="cmp_sa">${opts(SEDES, sa)}</select></label></div>
+    <div class="cmp-vs">contra</div>
+    <div class="cmp-fila"><label class="c"><span>Equipo 2</span><select id="cmp_b">${opts(eqs.filter(x => x !== a), b)}</select></label><label class="c cmp-sede"><span>Dónde juega</span><select id="cmp_sb">${opts(SEDES, sb)}</select></label></div>
+    <button type="button" id="cmp_buscar" class="buscar">🔎 Buscar</button>
+    <div id="cmp_res"></div>`;
+  const leer = () => { poner("ca", $("#cmp_a").value); poner("cb", $("#cmp_b").value); poner("csa", $("#cmp_sa").value); poner("csb", $("#cmp_sb").value); guardar(); };
+  $("#cmp_a").addEventListener("change", () => { leer(); dibujarComparador(); });
+  ["#cmp_b", "#cmp_sa", "#cmp_sb"].forEach(s => $(s).addEventListener("change", () => { leer(); $("#cmp_res").innerHTML = ""; }));
+  $("#cmp_buscar").addEventListener("click", () => { leer(); buscarComparacion(); });
+}
+
+function buscarComparacion() {
+  const L = ligaFutbol(ST.liga), A = val("ca"), B = val("cb"), SA = val("csa"), SB = val("csb");
+  const fa = filtrarSede(L.FE.filter(r => r.equipo === A), SA), fb = filtrarSede(L.FE.filter(r => r.equipo === B), SB);
+  const cab = (n, s, f) => `<div class="cmp-eq"><img src="${escudoEq(n)}" alt=""><b>${esc(n)}</b><small>${textoSede(s)} · ${f.length} partido${f.length === 1 ? "" : "s"}</small></div>`;
+  let h = `<div class="cmp-cab">${cab(A, SA, fa)}${cab(B, SB, fb)}</div>`;
+  if (!fa.length || !fb.length) { $("#cmp_res").innerHTML = h + `<p class="vacio">Alguno de los dos no tiene partidos con esa condición (casa/fuera).</p>`; return; }
+  const bloque = (n, s, f) => {
+    const d = destacadosEquipo(f), j = destacadosJugadores(L, n, s);
+    return `<div class="cmp-col"><h3>${esc(n)} <small>${textoSede(s)}</small></h3>` +
+      (d.length ? d.map(x => `<div class="dest"><span>${esc(x.txt)}</span><b>${fmtT(x.t)} · ${pct(x.t)}%</b></div>`).join("") : `<p class="nota">Nada pasa en el 80 % o más de sus partidos.</p>`) +
+      (j.length ? `<h4>Jugadores</h4>` + j.map(x => `<div class="dest"><span>${esc(x.nombre)} · ${esc(x.txt)}</span><b>${fmtT(x.t)} · ${pct(x.t)}%</b></div>`).join("") : "") + `</div>`;
+  };
+  h += `<h2>Destacados (80 % o más)</h2><div class="cmp-cols">${bloque(A, SA, fa)}${bloque(B, SB, fb)}</div>`;
+  let t = `<table class="cmp-tabla"><thead><tr><th></th><th>${esc(A)}</th><th>${esc(B)}</th></tr></thead><tbody>`;
+  for (const [nombre, lineas] of TABLA) for (const [l, f] of lineas) t += `<tr><td>${esc(nombre)}${l === "" ? "" : " +" + coma(l)}</td>${celda(tasa(fa, f))}${celda(tasa(fb, f))}</tr>`;
+  h += `<h2>Comparativa</h2>${t}</tbody></table><p class="nota">Porcentaje de partidos de esta temporada (con el filtro de casa/fuera de cada equipo) en los que ha pasado. Verde = 80 % o más. Los córners vienen de football-data.co.uk. Es histórico: no garantiza lo que pasará.</p>`;
+  $("#cmp_res").innerHTML = h;
 }
 
 document.querySelectorAll('input[name="dep"]').forEach(r => r.addEventListener("change", () => { ST.dep = r.value; cambiarVista(); }));
@@ -545,7 +682,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261031000656";
+  const BUILD = "20261031092043";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
