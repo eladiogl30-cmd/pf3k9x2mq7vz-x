@@ -542,8 +542,6 @@ function cabecera() {
     : `Temporada ${B.temporada} · partidos hasta el ${B.hasta}`;
   $("#pie").textContent = `Datos generados el ${DATOS.generado}. Solo informativo.`;
   document.querySelectorAll('input[name="dep"]').forEach(r => r.checked = r.value === ST.dep);
-  if (!futbol && ST.sub === "cmp") ST.sub = "jug";                                    // el comparador solo existe en futbol
-  $("#tabs button[data-sub=cmp]").style.display = futbol ? "" : "none";
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("act", b.dataset.sub === ST.sub));
   const caja = $("#ligas");
   caja.style.display = futbol ? "" : "none";
@@ -556,7 +554,7 @@ function cambiarVista() {
   $("#panel").style.display = sinDatos ? "none" : "";
   $("#sindatos").style.display = sinDatos ? "" : "none";
   if (sinDatos) { $("#sindatos").textContent = `Aún no hay datos de ${ST.liga}. Cuando se carguen aparecerán aquí.`; guardar(); return; }
-  const cmp = ST.dep === "futbol" && ST.sub === "cmp";
+  const cmp = ST.sub === "cmp";
   $("#cuerpo").style.display = cmp ? "none" : ""; $("#comparador").style.display = cmp ? "" : "none";
   if (cmp) { dibujarComparador(); guardar(); return; }
   dibujarControles(); actualizar(); guardar();
@@ -628,7 +626,99 @@ function destacadosJugadores(L, equipo, sede) {
   return out.sort((a, b) => b.t.k / b.t.n - a.t.k / a.t.n || b.l - a.l || b.t.n - a.t.n).slice(0, 8);
 }
 
+// ---- comparador de equipos NBA ----------------------------------------------------------------------------------------------
+// Igual que el de futbol: dos equipos, dónde juega cada uno (casa/fuera/todos) y la temporada (por defecto todas las cargadas, para tener mas partidos). Puntos del equipo, del rival, total del
+// partido, quien gana, y los jugadores del equipo (puntos, rebotes, asistencias, triples, puntos+rebotes+asistencias) con porcentajes altos.
+const EST_EQ_NBA = [
+  {t: "puntos", g: r => r.pts, ls: rango(95.5, 135.5)}, {t: "puntos del rival", g: r => r.pts_r, ls: rango(95.5, 135.5)}, {t: "puntos del partido", g: r => r.pts + r.pts_r, ls: rango(195.5, 250.5)}];
+const SI_NO_NBA = [{si: "gana el partido", no: "pierde el partido", f: r => r.pts > r.pts_r}];
+const EST_JUG_NBA = [
+  {t: "puntos", g: r => r.pts, ls: rango(4.5, 39.5)}, {t: "rebotes", g: r => r.reb, ls: rango(1.5, 14.5)}, {t: "asistencias", g: r => r.ast, ls: rango(1.5, 11.5)},
+  {t: "triples", g: r => r.fg3, ls: rango(0.5, 5.5)}, {t: "puntos + rebotes + asistencias", g: r => r.pts + r.reb + r.ast, ls: rango(10.5, 50.5)}];
+const TABLA_NBA = [
+  ["Gana el partido", [["", r => r.pts > r.pts_r]]],
+  ["Puntos del equipo", [[105.5, sobre(r => r.pts, 105.5)], [110.5, sobre(r => r.pts, 110.5)], [115.5, sobre(r => r.pts, 115.5)], [120.5, sobre(r => r.pts, 120.5)]]],
+  ["Puntos del rival", [[105.5, sobre(r => r.pts_r, 105.5)], [110.5, sobre(r => r.pts_r, 110.5)], [115.5, sobre(r => r.pts_r, 115.5)]]],
+  ["Total del partido", [[215.5, sobre(r => r.pts + r.pts_r, 215.5)], [220.5, sobre(r => r.pts + r.pts_r, 220.5)], [225.5, sobre(r => r.pts + r.pts_r, 225.5)], [230.5, sobre(r => r.pts + r.pts_r, 230.5)]]]];
+const escudoNba = a => ((DATOS.escudos || {}).nba || {})[a] || "";
+
+function filasEquipoNBA(abbr, sede, temp) {
+  const porGame = new Map(); NE.forEach(r => { (porGame.get(r.game) || porGame.set(r.game, []).get(r.game)).push(r); });
+  const mias = NE.filter(r => r.eq === abbr && (temp === "Todas" || r.temp === temp));
+  return filtrarSede(mias.map(r => { const o = (porGame.get(r.game) || []).find(x => x.tid !== r.tid); return o ? {...r, pts_r: o.pts} : null; }).filter(Boolean), sede);
+}
+
+function destacadosEquipoNBA(filas) {
+  const out = [];
+  if (filas.length < MIN_PART) return out;
+  for (const s of SI_NO_NBA) { const t = tasa(filas, s.f); if (t.n >= MIN_PART) { if (t.k / t.n >= UMBRAL) out.push({txt: s.si, t}); else if (1 - t.k / t.n >= UMBRAL) out.push({txt: s.no, t: {k: t.n - t.k, n: t.n}}); } }
+  for (const e of EST_EQ_NBA) {
+    let mejor = null;
+    for (const l of e.ls) { const t = tasa(filas, sobre(e.g, l)); if (t.n >= MIN_PART && t.k / t.n >= UMBRAL) mejor = {txt: `más de ${coma(l)} ${e.t}`, t}; }
+    if (!mejor) for (const l of [...e.ls].reverse()) { const t = tasa(filas, bajo(e.g, l)); if (t.n >= MIN_PART && t.k / t.n >= UMBRAL) mejor = {txt: `menos de ${coma(l)} ${e.t}`, t}; }
+    if (mejor) out.push(mejor);
+  }
+  return out.sort((a, b) => b.t.k / b.t.n - a.t.k / a.t.n || b.t.n - a.t.n).slice(0, 8);
+}
+
+function destacadosJugadoresNBA(abbr, sede, temp) {
+  const por = new Map();
+  for (const r of filtrarSede(NJ.filter(x => x.equipo === abbr && (temp === "Todas" || x.temp === temp)), sede)) { if (!por.has(r.pid)) por.set(r.pid, []); por.get(r.pid).push(r); }
+  const out = [];
+  for (const filas of por.values()) {
+    if (filas.length < MIN_PART) continue;
+    for (const e of EST_JUG_NBA) {
+      let mejor = null;
+      for (const l of e.ls) { const t = tasa(filas, sobre(e.g, l)); if (t.n >= MIN_PART && t.k / t.n >= UMBRAL) mejor = {nombre: filas[0].jugador, txt: `más de ${coma(l)} ${e.t}`, t}; }
+      if (mejor) out.push(mejor);
+    }
+  }
+  return out.sort((a, b) => b.t.k / b.t.n - a.t.k / a.t.n || b.t.n - a.t.n).slice(0, 8);
+}
+
+function dibujarComparadorNBA() {
+  const caja = $("#comparador");
+  const abbrs = unicos(NE, r => r.eq).sort((x, y) => alfa(NOMBRE_NBA.get(x) || x, NOMBRE_NBA.get(y) || y));
+  const a = elegido("ca", abbrs, abbrs[0]), b = elegido("cb", abbrs.filter(x => x !== a), abbrs.find(x => x !== a));
+  const sa = elegido("csa", SEDES, "Casa"), sb = elegido("csb", SEDES, "Fuera"), temps = [...TEMPS_NBA, "Todas"], tp = elegido("ctemp", temps, "Todas");
+  poner("ca", a); poner("cb", b); poner("csa", sa); poner("csb", sb); poner("ctemp", tp);
+  const opts = (lista, sel, nom) => lista.map(x => `<option value="${esc(x)}"${x === sel ? " selected" : ""}>${esc(nom ? nom(x) : x)}</option>`).join("");
+  const nom = x => NOMBRE_NBA.get(x) || x;
+  caja.innerHTML = `
+    <p class="nota">Elige dos equipos y dónde juega cada uno. Al buscar, ves en qué porcentaje de sus partidos ha pasado cada cosa y lo que ha pasado casi siempre.</p>
+    <div class="cmp-fila"><label class="c"><span>Equipo 1</span><select id="cmp_a">${opts(abbrs, a, nom)}</select></label><label class="c cmp-sede"><span>Dónde juega</span><select id="cmp_sa">${opts(SEDES, sa)}</select></label></div>
+    <div class="cmp-vs">contra</div>
+    <div class="cmp-fila"><label class="c"><span>Equipo 2</span><select id="cmp_b">${opts(abbrs.filter(x => x !== a), b, nom)}</select></label><label class="c cmp-sede"><span>Dónde juega</span><select id="cmp_sb">${opts(SEDES, sb)}</select></label></div>
+    <div class="cmp-fila"><label class="c"><span>Temporada</span><select id="cmp_t">${opts(temps, tp)}</select></label></div>
+    <button type="button" id="cmp_buscar" class="buscar">🔎 Buscar</button>
+    <div id="cmp_res"></div>`;
+  const leer = () => { poner("ca", $("#cmp_a").value); poner("cb", $("#cmp_b").value); poner("csa", $("#cmp_sa").value); poner("csb", $("#cmp_sb").value); poner("ctemp", $("#cmp_t").value); guardar(); };
+  $("#cmp_a").addEventListener("change", () => { leer(); dibujarComparadorNBA(); });
+  ["#cmp_b", "#cmp_sa", "#cmp_sb", "#cmp_t"].forEach(s => $(s).addEventListener("change", () => { leer(); $("#cmp_res").innerHTML = ""; }));
+  $("#cmp_buscar").addEventListener("click", () => { leer(); buscarComparacionNBA(); });
+}
+
+function buscarComparacionNBA() {
+  const A = val("ca"), B = val("cb"), SA = val("csa"), SB = val("csb"), T = val("ctemp");
+  const fa = filasEquipoNBA(A, SA, T), fb = filasEquipoNBA(B, SB, T);
+  const cab = (n, s, f) => `<div class="cmp-eq"><img src="${escudoNba(n)}" alt=""><b>${esc(NOMBRE_NBA.get(n) || n)}</b><small>${textoSede(s)} · ${f.length} partido${f.length === 1 ? "" : "s"}</small></div>`;
+  let h = `<div class="cmp-cab">${cab(A, SA, fa)}${cab(B, SB, fb)}</div>`;
+  if (!fa.length || !fb.length) { $("#cmp_res").innerHTML = h + `<p class="vacio">Alguno de los dos no tiene partidos con esa condición (casa/fuera/temporada).</p>`; return; }
+  const bloque = (n, s, f) => {
+    const d = destacadosEquipoNBA(f), j = destacadosJugadoresNBA(n, s, T);
+    return `<div class="cmp-col"><h3>${esc(NOMBRE_NBA.get(n) || n)} <small>${textoSede(s)}</small></h3>` +
+      (d.length ? d.map(x => `<div class="dest"><span>${esc(x.txt)}</span><b>${fmtT(x.t)} · ${pct(x.t)}%</b></div>`).join("") : `<p class="nota">Nada pasa en el 80 % o más de sus partidos.</p>`) +
+      (j.length ? `<h4>Jugadores</h4>` + j.map(x => `<div class="dest"><span>${esc(x.nombre)} · ${esc(x.txt)}</span><b>${fmtT(x.t)} · ${pct(x.t)}%</b></div>`).join("") : "") + `</div>`;
+  };
+  h += `<h2>Destacados (80 % o más)</h2><div class="cmp-cols">${bloque(A, SA, fa)}${bloque(B, SB, fb)}</div>`;
+  let t = `<table class="cmp-tabla"><thead><tr><th></th><th>${esc(A)}</th><th>${esc(B)}</th></tr></thead><tbody>`;
+  for (const [nombre, lineas] of TABLA_NBA) for (const [l, f] of lineas) t += `<tr><td>${esc(nombre)}${l === "" ? "" : " +" + coma(l)}</td>${celda(tasa(fa, f))}${celda(tasa(fb, f))}</tr>`;
+  h += `<h2>Comparativa</h2>${t}</tbody></table><p class="nota">Porcentaje de partidos (con el filtro de casa/fuera y la temporada elegidos) en los que ha pasado. Verde = 80 % o más. Es histórico: no garantiza lo que pasará.</p>`;
+  $("#cmp_res").innerHTML = h;
+}
+
 function dibujarComparador() {
+  if (ST.dep === "nba") return dibujarComparadorNBA();
   const L = ligaFutbol(ST.liga), caja = $("#comparador");
   const eqs = unicos(L.FE, x => x.equipo).sort(alfa);
   const a = elegido("ca", eqs, eqs[0]), b = elegido("cb", eqs.filter(x => x !== a), eqs.find(x => x !== a));
@@ -682,7 +772,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261031092043";
+  const BUILD = "20261031100234";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
