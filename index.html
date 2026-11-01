@@ -658,7 +658,8 @@ const EST_EQ_NBA = [
 const SI_NO_NBA = [{si: "gana el partido", no: "pierde el partido", f: r => r.pts > r.pts_r}];
 const EST_JUG_NBA = [
   {t: "puntos", g: r => r.pts, ls: rango(4.5, 39.5)}, {t: "rebotes", g: r => r.reb, ls: rango(1.5, 14.5)}, {t: "asistencias", g: r => r.ast, ls: rango(1.5, 11.5)},
-  {t: "triples", g: r => r.fg3, ls: rango(0.5, 5.5)}, {t: "puntos + rebotes + asistencias", g: r => r.pts + r.reb + r.ast, ls: rango(10.5, 50.5)}];
+  {t: "triples", g: r => r.fg3, ls: rango(0.5, 5.5)}, {t: "robos", g: r => r.stl, ls: rango(0.5, 3.5)}, {t: "tapones", g: r => r.blk, ls: rango(0.5, 3.5)},
+  {t: "puntos + rebotes + asistencias", g: r => r.pts + r.reb + r.ast, ls: rango(10.5, 50.5)}];
 const TABLA_NBA = [
   ["Gana el partido", [["", r => r.pts > r.pts_r]]],
   ["Puntos del equipo", [[105.5, sobre(r => r.pts, 105.5)], [110.5, sobre(r => r.pts, 110.5)], [115.5, sobre(r => r.pts, 115.5)], [120.5, sobre(r => r.pts, 120.5)]]],
@@ -814,7 +815,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261101103822";
+  const BUILD = "20261101104151";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
