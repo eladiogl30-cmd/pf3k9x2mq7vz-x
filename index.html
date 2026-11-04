@@ -900,6 +900,7 @@ function tnFila(r) {                      // r = fila de partidos del jugador ->
   const o = {f: r[0], torneo: D.tor[r[1]], s: r[2], cat: D.cat[r[3]], ron: D.ron[r[4]], riv: D.riv[r[5]], w: r[6], sc: r[7], b5: (r[8] & 1) === 1, ret: (r[8] & 2) === 2};
   const sets = tnMarcador(o.sc, o.ret);
   o.sets = sets;
+  if (r[9] && !o.ret) { const q = r[9]; o.st = {ac: q[0], df: q[1], p1: q[2], w1: q[3], w2: q[4], hold: q[5], brk: q[6], bpc: q[7], bpf: q[8], bps: q[9], min: q[10], acr: q[11], dfr: q[12]}; }    // estadisticas de saque (solo partidos que las tienen y sin retirada)
   if (sets) {
     const gan = sets.reduce((s, x) => s + (x.sup ? 1 : x.a), 0), per = sets.reduce((s, x) => s + (x.sup ? 0 : x.b), 0);
     o.jg = o.w ? gan : per; o.jc = o.w ? per : gan; o.tot = gan + per;                      // juegos del jugador / del rival / del partido
@@ -1084,6 +1085,9 @@ function tnResultado() {
   h += `<h2>Comparativa</h2>${t}</tbody></table>`;
   h += `<div class="cmp-cols"><div class="cmp-col"><h3>${esc(A.n)} <small>últimos 10</small></h3>${tnForm(ra.f10)}</div><div class="cmp-col"><h3>${esc(B.n)} <small>últimos 10</small></h3>${tnForm(rb.f10)}</div></div>`;
 
+  // saque y resto
+  h += tnBloqueSaque(A, B, ia, ib, s);
+
   // juegos y props
   const ls = b5 ? [30.5, 33.5, 36.5, 39.5] : [19.5, 20.5, 21.5, 22.5, 23.5, 24.5];
   const pa_ = tnPropsJugador(ia, s, b5, ls), pb_ = tnPropsJugador(ib, s, b5, ls);
@@ -1097,6 +1101,31 @@ function tnResultado() {
   h += `<h2>Destacados (80 % o más)</h2><div class="cmp-cols">${dest.map(({j, d}) => `<div class="cmp-col"><h3>${esc(j.n)}</h3>${d.length ? d.map(x => `<div class="dest"><span>${esc(x.txt)}</span><b>${x.k}/${x.n} · ${Math.round(100 * x.k / x.n)}%</b></div>`).join("") : '<div class="nota">Nada llega al 80 %.</div>'}</div>`).join("")}</div>`;
   h += `<p class="nota">Ranking oficial a fecha ${esc(D.rank_fecha || "?")}. ELO = ranking propio calculado con todos los partidos desde 2015. El tie-break "a 10" cuenta como 1 juego. Verde = 80 % o más. Solo informativo.</p>`;
   $("#tn_res").innerHTML = h;
+}
+const TN_SAQUE_N = 10, TN_SAQUE_MIN = 3;        // ultimos 10 partidos con estadisticas; menos de 3 no se muestra
+const TN_SAQUE = [                               // [texto, clave, mejor ('mayor'|'menor'|null), es porcentaje]
+  ["Aces por partido", "ac", "mayor", false], ["Dobles faltas por partido", "df", "menor", false], ["Primeros saques dentro", "p1", "mayor", true],
+  ["Puntos ganados con el 1er saque", "w1", "mayor", true], ["Puntos ganados con el 2º saque", "w2", "mayor", true], ["Juegos de saque ganados", "hold", "mayor", true],
+  ["Juegos de resto ganados (break)", "brk", "mayor", true], ["Bolas de break convertidas por partido", "bpc", "mayor", false], ["Duración media (min)", "min", null, false]];
+function tnMediaSaque(i, s) {
+  const p = tnPartidos(i).filter(x => x.st && (s < 0 || x.s === s)).slice(0, TN_SAQUE_N), r = {n: p.length};
+  for (const [, k] of TN_SAQUE) r[k] = tnMedia(p.map(x => x.st[k]).filter(v => v != null));
+  r.acT = tnMedia(p.filter(x => x.st.ac != null && x.st.acr != null).map(x => x.st.ac + x.st.acr));
+  return r;
+}
+function tnBloqueSaque(A, B, ia, ib, s) {
+  const a = tnMediaSaque(ia, s), b = tnMediaSaque(ib, s), sn = s >= 0 ? " en " + TN_SUP[s].toLowerCase() : "";
+  if (a.n < TN_SAQUE_MIN && b.n < TN_SAQUE_MIN) return `<h2>Saque y resto</h2><p class="nota">Casi no hay estadísticas de saque de estos jugadores${sn} (solo desde junio de 2026 y no en todos los partidos).</p>`;
+  const celda = (x, r, k, pc, mejorA) => !Number.isFinite(r[k]) || r.n < TN_SAQUE_MIN ? `<td><b>–</b></td>` : `<td class="${mejorA ? "alto" : ""}"><b>${tnFmt1(r[k])}${pc ? "%" : ""}</b></td>`;
+  let t = `<table class="cmp-tabla"><thead><tr><th></th><th>${esc(A.n)}</th><th>${esc(B.n)}</th></tr></thead><tbody>`;
+  for (const [txt, k, mejor, pc] of TN_SAQUE) {
+    const ok = a.n >= TN_SAQUE_MIN && b.n >= TN_SAQUE_MIN && Number.isFinite(a[k]) && Number.isFinite(b[k]) && Math.abs(a[k] - b[k]) > 0.05;
+    const ganaA = ok && mejor && (mejor === "mayor" ? a[k] > b[k] : a[k] < b[k]), ganaB = ok && mejor && !ganaA;
+    t += `<tr><td>${esc(txt)}</td>${celda(A, a, k, pc, ganaA)}${celda(B, b, k, pc, ganaB)}</tr>`;
+  }
+  t += `<tr><td>Partidos con estadísticas</td><td><b>${a.n}</b></td><td><b>${b.n}</b></td></tr></tbody></table>`;
+  const aces = a.n >= TN_SAQUE_MIN && b.n >= TN_SAQUE_MIN && Number.isFinite(a.ac) && Number.isFinite(b.ac) ? `Aces esperados en el partido ≈ <b>${tnFmt1(a.ac + b.ac)}</b> (suma de lo que saca cada uno de media). ` : "";
+  return `<h2>Saque y resto</h2><p class="nota">Media de los últimos ${TN_SAQUE_N} partidos con estadísticas${sn} (sin retiradas). ${aces}Verde = mejor de los dos.</p>${t}`;
 }
 function tnCelda(f) {
   const alto = f.n >= TN_MIN && f.k / f.n >= 0.8, bajo = f.n && f.k / f.n <= 0.2;
@@ -1119,15 +1148,22 @@ function tnDestacados(r) {
 
 // ---- Jugador: barras de los ultimos partidos frente a una linea ------------------------------------------------------------------
 const TN_STATS = {tj: ["Juegos totales del partido", x => x.tot, 21.5], jg: ["Juegos ganados por el jugador", x => x.jg, 12.5], jc: ["Juegos ganados por el rival", x => x.jc, 9.5],
-                  ns: ["Sets jugados", x => x.nsets, 2.5]};
+                  ns: ["Sets jugados", x => x.nsets, 2.5],
+                  ac: ["Aces del jugador", x => x.st.ac, 5.5, true], df: ["Dobles faltas del jugador", x => x.st.df, 2.5, true], acT: ["Aces totales del partido", x => x.st.ac + x.st.acr, 10.5, true],
+                  dfT: ["Dobles faltas totales del partido", x => x.st.df + x.st.dfr, 4.5, true], p1: ["% primeros saques dentro", x => x.st.p1, 62.5, true],
+                  w1: ["% puntos ganados con el 1er saque", x => x.st.w1, 70.5, true], w2: ["% puntos ganados con el 2º saque", x => x.st.w2, 50.5, true],
+                  hold: ["% juegos de saque ganados", x => x.st.hold, 80.5, true], brk: ["% juegos de resto ganados", x => x.st.brk, 20.5, true],
+                  bpc: ["Bolas de break convertidas", x => x.st.bpc, 2.5, true], bpf: ["Bolas de break salvadas", x => x.st.bps, 3.5, true], min: ["Minutos de partido", x => x.st.min, 100.5, true]};
+const tnTieneStat = (x, def) => def[3] ? !!x.st && Number.isFinite(def[1](x)) : !!x.sets;
 function tnJugador() {
   const D = TN.datos, caja = $("#tn_cuerpo");
-  const i = D.pos.get(TN.jug), todos = tnPartidos(i).filter(x => x.sets);
+  if (!TN_STATS[TN.stat]) TN.stat = "tj";
+  const i = D.pos.get(TN.jug), todos = tnPartidos(i).filter(x => tnTieneStat(x, TN_STATS[TN.stat]));
   const rivales = [...new Set(todos.map(x => x.riv))].sort();
   if (TN.rival && !rivales.includes(TN.rival)) TN.rival = "";
   const opc = (v, t, sel) => `<option value="${esc(v)}"${sel ? " selected" : ""}>${esc(t)}</option>`;
   caja.innerHTML = `${tnCampoJugador("tn_j", "Jugador", TN.jug)}
-    <div class="cmp-fila"><label class="c"><span>Estadística</span><select id="tn_stat">${Object.entries(TN_STATS).map(([k, v]) => opc(k, v[0], TN.stat === k)).join("")}</select></label>
+    <div class="cmp-fila"><label class="c"><span>Estadística</span><select id="tn_stat"><optgroup label="Marcador">${Object.entries(TN_STATS).filter(([, v]) => !v[3]).map(([k, v]) => opc(k, v[0], TN.stat === k)).join("")}</optgroup><optgroup label="Saque y resto">${Object.entries(TN_STATS).filter(([, v]) => v[3]).map(([k, v]) => opc(k, v[0], TN.stat === k)).join("")}</optgroup></select></label>
       <label class="c cmp-sede"><span>Partidos</span><select id="tn_n">${[5, 10, 15].map(n => opc(n, n, TN.n === n)).join("")}</select></label></div>
     <div class="cmp-fila"><label class="c"><span>Contra</span><select id="tn_riv">${opc("", "Todos los rivales", !TN.rival)}${rivales.map(r => opc(r, r, TN.rival === r)).join("")}</select></label></div>
     <div class="linea"><button type="button" id="tn_menos" aria-label="Bajar la línea">−</button><input type="number" id="tn_linea" step="0.5" min="0" inputmode="decimal" aria-label="Línea"><button type="button" id="tn_mas" aria-label="Subir la línea">+</button></div>
@@ -1146,11 +1182,11 @@ function tnJugador() {
 }
 function tnBarras() {
   const D = TN.datos, i = D.pos.get(TN.jug), j = D.jug[i], def = TN_STATS[TN.stat], linea = Number($("#tn_linea").value);
-  let d = tnPartidos(i).filter(x => x.sets && (s_ok(x)));
+  let d = tnPartidos(i).filter(x => tnTieneStat(x, def) && (s_ok(x)));
   function s_ok(x) { return (TN.sup < 0 || x.s === TN.sup) && (!TN.rival || x.riv === TN.rival); }
   d = d.slice(0, TN.n).reverse();                                       // cronologico: el ultimo a la derecha
   const cont = $("#tn_barras");
-  if (!d.length) { cont.innerHTML = '<p class="vacio">No hay partidos con marcador completo con esos filtros.</p>'; return; }
+  if (!d.length) { cont.innerHTML = '<p class="vacio">${def[3] ? "No hay partidos con estadísticas de saque con esos filtros (solo hay desde junio de 2026)." : "No hay partidos con marcador completo con esos filtros."}</p>'; return; }
   const vals = d.map(x => def[1](x)), max = Math.max(...vals, linea) * 1.15 + 1, alto = 200;
   const sup = vals.filter(v => v > linea).length, ig = vals.filter(v => v === linea).length;
   const barras = d.map((x, k) => {
@@ -1164,7 +1200,7 @@ function tnBarras() {
     <div class="tn-graf" style="height:${alto + 100}px"><div class="tn-linea" style="bottom:${top + 100}px"><span>Línea ${tnComa(linea)}</span></div>${barras}</div>
     <div class="tarjetas"><div class="tarjeta"><small>Supera la línea</small><b>${sup}/${d.length}</b><i>${Math.round(100 * sup / d.length)}%</i></div><div class="tarjeta"><small>Media</small><b>${tnFmt1(m)}</b></div><div class="tarjeta"><small>Mediana</small><b>${tnComa(med)}</b></div><div class="tarjeta"><small>Último partido</small><b>${vals[vals.length - 1]}</b></div></div>
     ${ig ? `<p class="nota">${ig} partido(s) exactamente igual a la línea (gris).</p>` : ""}
-    <p class="nota"><b class="tn-wlb g">G</b> / <b class="tn-wlb p">P</b> = ganó / perdió el partido. Solo partidos con marcador completo (sin retiradas). Pasa el dedo o el ratón por una barra para ver el partido.</p>`;
+    <p class="nota"><b class="tn-wlb g">G</b> / <b class="tn-wlb p">P</b> = ganó / perdió el partido. ${def[3] ? "Solo partidos con estadísticas de saque (desde junio de 2026, sin retiradas)." : "Solo partidos con marcador completo (sin retiradas)."} Pasa el dedo o el ratón por una barra para ver el partido.</p>`;
 }
 
 document.querySelectorAll('input[name="dep"]').forEach(r => r.addEventListener("change", () => { ST.dep = r.value; cambiarVista(); }));
@@ -1182,7 +1218,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261104205327";
+  const BUILD = "20261104224242";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
