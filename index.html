@@ -99,9 +99,9 @@ button.buscar{width:100%;height:46px;border:0;border-radius:10px;background:var(
 input[type=text]{width:100%;height:42px;border:1px solid transparent;border-radius:8px;background:var(--card);color:var(--fg);font:inherit;font-size:16px;padding:0 12px}
 input[type=text]:focus{outline:none;border-color:var(--accent)}
 .tn-forma{display:flex;gap:4px;flex-wrap:wrap}
-.tn-forma i,.tn-wlb{font-style:normal;font-weight:700;font-size:.78rem;border-radius:5px;padding:2px 0;width:24px;text-align:center;color:#fff;display:inline-block}
-.tn-forma i.g,.tn-wlb.g,.tn-wl.g{background:var(--ok)}
-.tn-forma i.p,.tn-wlb.p,.tn-wl.p{background:var(--bad)}
+.tn-forma i,.tn-forma button,.tn-wlb{font-style:normal;font-weight:700;font-size:.78rem;border-radius:5px;padding:2px 0;width:24px;text-align:center;color:#fff;display:inline-block}
+.tn-forma i.g,.tn-forma button.g,.tn-wlb.g,.tn-wl.g{background:var(--ok)}
+.tn-forma i.p,.tn-forma button.p,.tn-wlb.p,.tn-wl.p{background:var(--bad)}
 .tn-pr{font-size:1.9rem;font-weight:600;line-height:1.1;margin-top:4px}
 .tn-barra{height:10px;border-radius:5px;background:var(--bad);overflow:hidden;margin:2px 0 6px}
 .tn-barra i{display:block;height:100%;background:var(--ok)}
@@ -120,6 +120,9 @@ input[type=text]:focus{outline:none;border-color:var(--accent)}
 .tn-sup.s1{background:rgba(234,120,50,.32)}
 .tn-sup.s2{background:rgba(34,170,90,.30)}
 .tn-sup.s3{background:rgba(140,120,200,.32)}
+
+.tn-forma button{border:0;font-family:inherit;cursor:pointer;min-width:24px;min-height:28px}.tn-forma button.sel{outline:2px solid var(--fg);outline-offset:1px}
+.tn-det{margin-top:6px}.tn-det-in{background:var(--bg);border-radius:8px;padding:2px 10px}.tn-det .dest{font-size:.86rem}.tn-det .dest b{color:var(--fg);white-space:normal;text-align:right}
 
 footer{margin-top:22px;color:var(--muted);font-size:.75rem}
 </style>
@@ -840,7 +843,7 @@ function buscarComparacion() {
 // ---- TENIS: comparador de jugadores + barras de juegos por partido -----------------------------------------------------------------
 // Datos: window.DATOS_TENIS (web_props/tenis.js, lo escribe generar_web_tenis.py). Se carga solo al entrar en Tenis.
 // Solo hay una probabilidad "de ELO" (general + superficie); el resto son porcentajes reales de los partidos de los ultimos 24 meses.
-const TN = {datos: null, cargando: false, sub: "cmp", g: "H", a: "", b: "", sup: -1, sets: 3, jug: "", stat: "tj", n: 15, lineas: {}, rival: "", cache: {}};
+const TN = {formas: {}, datos: null, cargando: false, sub: "cmp", g: "H", a: "", b: "", sup: -1, sets: 3, jug: "", stat: "tj", n: 15, lineas: {}, rival: "", cache: {}};
 try { Object.assign(TN, JSON.parse(localStorage.getItem("props_tenis_v1") || "{}")); } catch (e) {}
 TN.datos = null; TN.cargando = false; TN.cache = {};
 const tnGuardar = () => { try { localStorage.setItem("props_tenis_v1", JSON.stringify({sub: TN.sub, g: TN.g, a: TN.a, b: TN.b, sup: TN.sup, sets: TN.sets, jug: TN.jug, stat: TN.stat, n: TN.n, lineas: TN.lineas, rival: TN.rival})); } catch (e) {} };
@@ -998,7 +1001,27 @@ function tnResumenJugador(i, s) {
   const juegos = a => a.reduce((t, x) => t + (x.tot || 0), 0);
   return {j, ult, dias: ult ? tnDias(ult.f) : null, f10, w10: w(f10), w20: w(f20), n20: f20.length, sp, wsp: w(sp), p14: v14.length, p30: v30.length, j14: juegos(v14), edad: tnEdad(j.na)};
 }
-const tnForm = a => `<div class="tn-forma">${a.map(x => `<i class="${x.w ? "g" : "p"}" title="${esc(`${tnDia(x.f)} ${x.torneo} · ${x.w ? "gana a" : "pierde con"} ${x.riv} ${x.sc}`)}">${x.w ? "G" : "P"}</i>`).join("")}</div>`;
+const tnForm = (a, id) => {               // casillas G/P: al tocar una se abre el detalle del partido debajo
+  TN.formas[id] = a;
+  return `<div class="tn-forma" data-f="${id}">${a.map((x, k) => `<button type="button" class="${x.w ? "g" : "p"}" data-k="${k}" aria-label="${esc(`${tnDia(x.f)} ${x.w ? "gana a" : "pierde con"} ${x.riv}`)}">${x.w ? "G" : "P"}</button>`).join("")}</div><div class="tn-det" id="det_${id}" hidden></div>`;
+};
+const tnMarcadorDe = x => x.w || !x.sc ? x.sc : x.sc.replace(/(\d+)-(\d+)/g, "$2-$1");        // marcador visto desde el jugador (el de la base es el del ganador)
+function tnDetalle(x) {
+  const D = TN.datos, ir = D.pos.get(x.riv), r = ir === undefined ? null : D.jug[ir];
+  const fila = (k, v) => v ? `<div class="dest"><span>${k}</span><b>${esc(v)}</b></div>` : "";
+  const rival = r ? `${r.nc || r.n}${r.pa ? " (" + r.pa + ")" : ""}${r.rk ? " · ranking " + r.rk : ""}` : x.riv;
+  const st = x.st, ex = st ? [st.ac != null ? `${st.ac} aces` : "", st.df != null ? `${st.df} dobles faltas` : "", st.p1 != null ? `${st.p1}% 1.º saque` : "", st.min ? `${st.min} min` : ""].filter(Boolean).join(" · ") : "";
+  return `<div class="tn-det-in">${fila("Fecha", tnDia(x.f) + "/" + x.f.slice(0, 4))}${fila("Rival", rival)}${fila("Resultado", `${x.w ? "Ganó" : "Perdió"} ${tnMarcadorDe(x)}${x.ret ? " (retirada)" : ""}`)}${fila("Torneo", x.torneo + (x.cat ? " · " + x.cat : ""))}${fila("Pista", x.s >= 0 ? TN_SUP[x.s] : "")}${fila("Ronda", x.ron)}${fila("Estadísticas", ex)}</div>`;
+}
+function tnEnlazarForma(raiz) {           // delegado: un clic en una casilla abre/cierra su detalle (y cierra el de la casilla anterior)
+  raiz.addEventListener("click", e => {
+    const b = e.target.closest(".tn-forma button"); if (!b) return;
+    const caja = b.parentElement, id = caja.dataset.f, det = document.getElementById("det_" + id), abierta = b.classList.contains("sel");
+    caja.querySelectorAll("button.sel").forEach(o => o.classList.remove("sel"));
+    if (abierta) { det.hidden = true; return; }
+    b.classList.add("sel"); det.innerHTML = tnDetalle(TN.formas[id][+b.dataset.k]); det.hidden = false;
+  });
+}
 
 function tnPropsJugador(i, s, b5, ls) {   // porcentajes de los ultimos 20 partidos validos (con marcador completo)
   const p = tnPartidos(i).filter(x => x.sets && (s < 0 || x.s === s)).slice(0, 20);
@@ -1083,7 +1106,7 @@ function tnResultado() {
   if (s >= 0) t += fila(`Victorias en ${sn} (24 meses)`, ra.sp.length ? ra.wsp / ra.sp.length * 100 : NaN, rb.sp.length ? rb.wsp / rb.sp.length * 100 : NaN, "mayor").replace(/<b>([\d,]+)<\/b>/g, "<b>$1%</b>");
   t += fila("Días sin jugar", ra.dias ?? NaN, rb.dias ?? NaN, null) + fila("Partidos últimos 14 días", ra.p14, rb.p14, null) + fila("Juegos jugados últimos 14 días", ra.j14, rb.j14, null);
   h += `<h2>Comparativa</h2>${t}</tbody></table>`;
-  h += `<div class="cmp-cols"><div class="cmp-col"><h3>${esc(A.n)} <small>últimos 10</small></h3>${tnForm(ra.f10)}</div><div class="cmp-col"><h3>${esc(B.n)} <small>últimos 10</small></h3>${tnForm(rb.f10)}</div></div>`;
+  h += `<div class="cmp-cols"><div class="cmp-col"><h3>${esc(A.n)} <small>últimos 10</small></h3>${tnForm(ra.f10, "a")}</div><div class="cmp-col"><h3>${esc(B.n)} <small>últimos 10</small></h3>${tnForm(rb.f10, "b")}</div></div>`;
 
   // saque y resto
   h += tnBloqueSaque(A, B, ia, ib, s);
@@ -1101,6 +1124,7 @@ function tnResultado() {
   h += `<h2>Destacados (80 % o más)</h2><div class="cmp-cols">${dest.map(({j, d}) => `<div class="cmp-col"><h3>${esc(j.n)}</h3>${d.length ? d.map(x => `<div class="dest"><span>${esc(x.txt)}</span><b>${x.k}/${x.n} · ${Math.round(100 * x.k / x.n)}%</b></div>`).join("") : '<div class="nota">Nada llega al 80 %.</div>'}</div>`).join("")}</div>`;
   h += `<p class="nota">Ranking oficial a fecha ${esc(D.rank_fecha || "?")}. ELO = ranking propio calculado con todos los partidos desde 2015. El tie-break "a 10" cuenta como 1 juego. Verde = 80 % o más. Solo informativo.</p>`;
   $("#tn_res").innerHTML = h;
+  tnEnlazarForma($("#tn_res"));
 }
 const TN_SAQUE_N = 10, TN_SAQUE_MIN = 3;        // ultimos 10 partidos con estadisticas; menos de 3 no se muestra
 const TN_SAQUE = [                               // [texto, clave, mejor ('mayor'|'menor'|null), es porcentaje]
@@ -1218,7 +1242,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261105053609";
+  const BUILD = "20261105054937";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
