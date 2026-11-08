@@ -844,11 +844,14 @@ const codEq = (tipo, n) => tipo === "nba" ? n : (CODIGOS[n] || n.slice(0, 3).toU
 
 // avance de un partido proximo: hasta AVANCE_MAX destacados (>= 80 %) mezclando local (en casa) y visitante (fuera), de equipo y de jugadores que juegan >= 60' (futbol) / 20' (NBA)
 const AVANCE_MAX = 5, AVCACHE = new Map();
+// a principio de temporada hay pocos partidos de casa o de fuera (menos de MIN_PART): entonces se cuentan todos los del equipo
+const sedeUtil = (tipo, eq, sede) => (tipo === "nba" ? filasEquipoNBA(eq, sede, TEMPS_NBA[0]).length : filtrarSede(ligaFutbol(ST.liga).FE.filter(r => r.equipo === eq), sede).length) < MIN_PART ? "Casa/Fuera" : sede;
 function avancePartido(tipo, x) {
   const clave_ = `${tipo}|${ST.liga}|${x.local}|${x.visitante}`;
   if (AVCACHE.has(clave_)) return AVCACHE.get(clave_);
   const items = (eq, sede) => {
     let de, dj;
+    sede = sedeUtil(tipo, eq, sede);
     if (tipo === "nba") { const T = TEMPS_NBA[0]; de = destacadosEquipoNBA(filasEquipoNBA(eq, sede, T)); dj = destacadosJugadoresNBA(eq, sede, T); }
     else { const L = ligaFutbol(ST.liga); de = destacadosEquipo(filtrarSede(L.FE.filter(r => r.equipo === eq), sede)); dj = destacadosJugadores(L, eq, sede); }
     return [...de.map(o => ({...o, eq, sede, jug: false})), ...dj.filter(o => !pocoJuega(o.mm)).map(o => ({...o, eq, sede, jug: true}))]
@@ -877,7 +880,7 @@ function conectarProximos(tipo) {
   }).join("") + `</div>`);
   caja.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => {
     const x = lista[Number(b.dataset.i)];
-    poner("ca", x.local); poner("cb", x.visitante); poner("csa", "Casa"); poner("csb", "Fuera"); guardar();
+    poner("ca", x.local); poner("cb", x.visitante); poner("csa", sedeUtil(tipo, x.local, "Casa")); poner("csb", sedeUtil(tipo, x.visitante, "Fuera")); guardar();
     if (tipo === "nba") { dibujarComparadorNBA(); buscarComparacionNBA(); } else { dibujarComparador(); buscarComparacion(); }
     $("#cmp_res").scrollIntoView({behavior: "smooth", block: "start"});
   }));
@@ -1326,7 +1329,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261108085032";
+  const BUILD = "20261108085939";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
