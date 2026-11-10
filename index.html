@@ -135,6 +135,10 @@ input[type=text]:focus{outline:none;border-color:var(--accent)}
 
 #tn_res{scroll-margin-top:12px}
 
+.prox-g{margin:0 0 10px}
+.prox-torneo{margin:10px 0 6px;font-size:.95rem}
+.prox-torneo small{color:var(--muted);font-weight:400;margin-left:4px}
+
 footer{margin-top:22px;color:var(--muted);font-size:.75rem}
 </style>
 </head>
@@ -1129,7 +1133,14 @@ function tnComparar() {
   const D = TN.datos, ia = D.pos.get(TN.a), ib = D.pos.get(TN.b);
   const caja = $("#tn_cuerpo");
   const prox = (D.prox || []).map((p, k) => ({p, k})).filter(({p}) => D.jug[p[0]].g === TN.g).sort((x, y) => x.p[6].localeCompare(y.p[6]) || (D.jug[y.p[0]].elo[0] + D.jug[y.p[1]].elo[0]) - (D.jug[x.p[0]].elo[0] + D.jug[x.p[1]].elo[0]));      // todos: por dia y, dentro del dia, los de mas nivel primero
-  const chips = prox.length ? `<h3 class="prox-t">Próximos partidos <small>toca uno</small></h3><div class="prox">${prox.map(({p, k}) => `<button type="button" class="chip" data-k="${k}"><span class="chip-eq"><b>${esc(D.jug[p[0]].n)}</b><i>–</i><b>${esc(D.jug[p[1]].n)}</b></span><small>${tnDia(p[6])}${p[7] ? " " + esc(p[7]) : ""} · ${esc(p[8].replace(/^(ATP|WTA|ITF Women|ITF Men) /, "").slice(0, 22))}</small>${p[9] >= 0 && p[9] <= 3 ? `<small class="tn-sup s${p[9]}">${TN_SUP[p[9]]}</small>` : ""}</button>`).join("")}</div>` : "";
+  const chipDe = ({p, k}) => `<button type="button" class="chip" data-k="${k}"><span class="chip-eq"><b>${esc(D.jug[p[0]].n)}</b><i>–</i><b>${esc(D.jug[p[1]].n)}</b></span><small>${tnDia(p[6])}${p[7] ? " " + esc(p[7]) : ""}</small>${p[9] >= 0 && p[9] <= 3 ? `<small class="tn-sup s${p[9]}">${TN_SUP[p[9]]}</small>` : ""}</button>`;
+  const grupos = new Map();                                                       // un bloque por torneo: ATP/WTA primero, luego Challenger, luego ITF; dentro, por dia y hora
+  prox.forEach(x => { const t = x.p[8] || "Otros"; if (!grupos.has(t)) grupos.set(t, []); grupos.get(t).push(x); });
+  const nivel = t => /Challenger/i.test(t) ? 1 : /^ITF/i.test(t) ? 2 : /^(ATP|WTA)/i.test(t) ? 0 : 1;
+  const fuerza = g => Math.max(...g.map(({p}) => D.jug[p[0]].elo[0] + D.jug[p[1]].elo[0]));
+  grupos.forEach(g => g.sort((x, y) => x.p[6].localeCompare(y.p[6]) || (x.p[7] || "").localeCompare(y.p[7] || "")));   // dentro de cada torneo, por dia y hora
+  const bloques = [...grupos.entries()].sort((a, b) => nivel(a[0]) - nivel(b[0]) || fuerza(b[1]) - fuerza(a[1]));
+  const chips = prox.length ? `<h3 class="prox-t">Próximos partidos <small>toca uno</small></h3>${bloques.map(([t, g]) => `<div class="prox-g"><h4 class="prox-torneo">${esc(t)} <small>${g.length} ${g.length === 1 ? "partido" : "partidos"}</small></h4><div class="prox">${g.map(chipDe).join("")}</div></div>`).join("")}` : "";
   const campos = `${chips}<div class="cmp-fila">${tnCampoJugador("tn_a", "Jugador 1", TN.a)}${tnCampoJugador("tn_b", "Jugador 2", TN.b)}</div>
     <div class="cmp-fila"><label class="c"><span>Partido a</span><select id="tn_sets"><option value="3"${TN.sets === 3 ? " selected" : ""}>3 sets</option><option value="5"${TN.sets === 5 ? " selected" : ""}>5 sets (Grand Slam)</option></select></label>
     <label class="c"><span>&nbsp;</span><button type="button" class="buscar" id="tn_swap" style="margin:0;height:42px;background:var(--card);color:var(--fg)">⇄ Intercambiar</button></label></div><div id="tn_res"></div>`;
@@ -1153,7 +1164,7 @@ function tnResultado() {
   const cuota = x => (1 / x).toFixed(2).replace(".", ",");
   const nombre = j => esc(j.nc || j.n);
   const tarjeta = (j, r, pr) => `<div class="cmp-eq"><b>${nombre(j)}</b><small>${esc(j.pa || "")}${r.edad ? " · " + r.edad + " años" : ""}</small>
-      <small>${j.rk ? `ranking oficial nº ${j.rk}` : "sin ranking oficial"} · ELO nº ${j.rkElo}</small><span class="tn-pr">${pr}%</span></div>`;
+      <small>${j.rk ? `ranking oficial nº ${j.rk}` : "sin ranking oficial"} · ELO nº ${j.rkElo}${j.pd ? " · pocos datos" : ""}</small><span class="tn-pr">${pr}%</span></div>`;
   let h = `<div class="cmp-cab">${tarjeta(A, ra, pa)}${tarjeta(B, rb, pb)}</div>
     <div class="tn-barra"><i style="width:${pa}%"></i></div>
     <p class="nota">Probabilidad según ELO${sup ? ` (mitad ELO general, mitad ELO de ${s === 3 ? "dura, que incluye la pista cubierta" : TN_SUP[s].toLowerCase()})` : " (ELO general; elige una superficie para afinar)"} · cuota justa ${cuota(p)} / ${cuota(1 - p)}. Si la casa paga más que la cuota justa, hay valor.</p>`;
@@ -1332,7 +1343,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261110183118";
+  const BUILD = "20261110184453";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
