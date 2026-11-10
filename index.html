@@ -936,11 +936,25 @@ function buscarComparacion() {
 // ---- TENIS: comparador de jugadores + barras de juegos por partido -----------------------------------------------------------------
 // Datos: window.DATOS_TENIS (web_props/tenis.js, lo escribe generar_web_tenis.py). Se carga solo al entrar en Tenis.
 // Solo hay una probabilidad "de ELO" (general + superficie); el resto son porcentajes reales de los partidos de los ultimos 24 meses.
-const TN = {formas: {}, datos: null, cargando: false, sub: "cmp", g: "H", a: "", b: "", sup: -1, sets: 3, jug: "", stat: "tj", n: 15, lineas: {}, rival: "", cache: {}};
+const TN = {formas: {}, datos: null, cargando: false, sub: "cmp", g: "H", a: "", b: "", sup: -1, tipo: -1, torneo: "", sets: 3, jug: "", stat: "tj", n: 15, lineas: {}, rival: "", cache: {}};
 try { Object.assign(TN, JSON.parse(localStorage.getItem("props_tenis_v1") || "{}")); } catch (e) {}
 TN.datos = null; TN.cargando = false; TN.cache = {};
 const tnGuardar = () => { try { localStorage.setItem("props_tenis_v1", JSON.stringify({sub: TN.sub, g: TN.g, a: TN.a, b: TN.b, sup: TN.sup, sets: TN.sets, jug: TN.jug, stat: TN.stat, n: TN.n, lineas: TN.lineas, rival: TN.rival})); } catch (e) {} };
 const TN_SUP = ["Dura", "Tierra", "Hierba", "Indoor"];
+const tnTiposTorneo = () => TN.g === "M" ? [[0, "Grand Slam"], [1, "WTA"]] : [[0, "Grand Slam"], [1, "ATP"], [2, "Challenger"]];   // codigo de p[10] -> etiqueta
+const tnProxDelCircuito = () => (TN.datos.prox || []).map((p, k) => ({p, k})).filter(({p}) => TN.datos.jug[p[0]].g === TN.g);
+const tnProxFiltrados = () => tnProxDelCircuito().filter(({p}) => (TN.tipo < 0 || p[10] === TN.tipo) && (!TN.torneo || p[8] === TN.torneo));
+function tnPintarFiltros() {                                                       // casillas "Tipo de torneo" y "Torneo" (solo los torneos detectados hoy/mañana)
+  const caja = $("#tn_filtros"); if (!caja) return;
+  const del = tnProxDelCircuito();
+  caja.style.display = TN.sub === "cmp" && del.length ? "" : "none";
+  if (TN.tipo >= 0 && !tnTiposTorneo().some(t => t[0] === TN.tipo)) TN.tipo = -1;
+  const tipoDe = new Map(del.map(({p}) => [p[8], p[10]]));
+  const tors = [...new Set(del.filter(({p}) => TN.tipo < 0 || p[10] === TN.tipo).map(({p}) => p[8]))].sort((x, y) => tipoDe.get(x) - tipoDe.get(y) || x.localeCompare(y));      // Grand Slam, ATP/WTA, Challenger; dentro, A-Z
+  if (TN.torneo && !tors.includes(TN.torneo)) TN.torneo = "";
+  $("#tn_tipo").innerHTML = `<option value="-1">Todos</option>` + tnTiposTorneo().map(([c, n]) => `<option value="${c}"${TN.tipo === c ? " selected" : ""}>${n}</option>`).join("");
+  $("#tn_tor").innerHTML = `<option value="">Todos (${tors.length})</option>` + tors.map(t => `<option value="${esc(t)}"${TN.torneo === t ? " selected" : ""}>${esc(t)}</option>`).join("");
+}
 const TN_MIN = 8;                      // partidos minimos para dar un porcentaje en los destacados
 const tnComa = x => String(x).replace(".", ",");
 
@@ -1075,9 +1089,16 @@ function tenisMostrar() {
         <label class="c"><span>Circuito</span><select id="tn_g"><option value="H"${TN.g === "H" ? " selected" : ""}>Hombres (ATP y Challenger)</option><option value="M"${TN.g === "M" ? " selected" : ""}>Mujeres (WTA)</option></select></label>
         <label class="c cmp-sede"><span>Superficie</span><select id="tn_sup">${sup}</select></label>
       </div>
+      <div class="cmp-fila" id="tn_filtros">
+        <label class="c"><span>Tipo de torneo</span><select id="tn_tipo"></select></label>
+        <label class="c cmp-sede"><span>Torneo</span><select id="tn_tor"></select></label>
+      </div>
       ${tnListaJugadores()}
       <div id="tn_cuerpo"></div>`;
-    $("#tn_g").addEventListener("change", e => { TN.g = e.target.value; tnDefectos(); tnGuardar(); tenisMostrar(); });
+    $("#tn_g").addEventListener("change", e => { TN.g = e.target.value; TN.tipo = -1; TN.torneo = ""; tnDefectos(); tnGuardar(); tenisMostrar(); });
+    $("#tn_tipo").addEventListener("change", e => { TN.tipo = +e.target.value; TN.torneo = ""; tnPintarFiltros(); tnCuerpo(); });
+    $("#tn_tor").addEventListener("change", e => { TN.torneo = e.target.value; tnCuerpo(); });
+    tnPintarFiltros();
     $("#tn_sup").addEventListener("change", e => { TN.sup = +e.target.value; tnGuardar(); tnCuerpo(); });
     document.querySelectorAll("#tn_tabs button").forEach(b => b.addEventListener("click", () => { TN.sub = b.dataset.sub; tnGuardar(); tenisMostrar(); }));
     tnCuerpo();
@@ -1132,7 +1153,7 @@ function tnPropsJugador(i, s, b5, ls) {   // porcentajes de los ultimos 20 parti
 function tnComparar() {
   const D = TN.datos, ia = D.pos.get(TN.a), ib = D.pos.get(TN.b);
   const caja = $("#tn_cuerpo");
-  const prox = (D.prox || []).map((p, k) => ({p, k})).filter(({p}) => D.jug[p[0]].g === TN.g).sort((x, y) => x.p[6].localeCompare(y.p[6]) || (D.jug[y.p[0]].elo[0] + D.jug[y.p[1]].elo[0]) - (D.jug[x.p[0]].elo[0] + D.jug[x.p[1]].elo[0]));      // todos: por dia y, dentro del dia, los de mas nivel primero
+  const prox = tnProxFiltrados().sort((x, y) => x.p[6].localeCompare(y.p[6]) || (D.jug[y.p[0]].elo[0] + D.jug[y.p[1]].elo[0]) - (D.jug[x.p[0]].elo[0] + D.jug[x.p[1]].elo[0]));      // todos: por dia y, dentro del dia, los de mas nivel primero
   const chipDe = ({p, k}) => `<button type="button" class="chip" data-k="${k}"><span class="chip-eq"><b>${esc(D.jug[p[0]].n)}</b><i>–</i><b>${esc(D.jug[p[1]].n)}</b></span><small>${tnDia(p[6])}${p[7] ? " " + esc(p[7]) : ""}</small>${p[9] >= 0 && p[9] <= 3 ? `<small class="tn-sup s${p[9]}">${TN_SUP[p[9]]}</small>` : ""}</button>`;
   const grupos = new Map();                                                       // un bloque por torneo: ATP/WTA primero, luego Challenger, luego ITF; dentro, por dia y hora
   prox.forEach(x => { const t = x.p[8] || "Otros"; if (!grupos.has(t)) grupos.set(t, []); grupos.get(t).push(x); });
@@ -1140,7 +1161,7 @@ function tnComparar() {
   const fuerza = g => Math.max(...g.map(({p}) => D.jug[p[0]].elo[0] + D.jug[p[1]].elo[0]));
   grupos.forEach(g => g.sort((x, y) => x.p[6].localeCompare(y.p[6]) || (x.p[7] || "").localeCompare(y.p[7] || "")));   // dentro de cada torneo, por dia y hora
   const bloques = [...grupos.entries()].sort((a, b) => nivel(a[0]) - nivel(b[0]) || fuerza(b[1]) - fuerza(a[1]));
-  const chips = prox.length ? `<h3 class="prox-t">Próximos partidos <small>toca uno</small></h3>${bloques.map(([t, g]) => `<div class="prox-g"><h4 class="prox-torneo">${esc(t)} <small>${g.length} ${g.length === 1 ? "partido" : "partidos"}</small></h4><div class="prox">${g.map(chipDe).join("")}</div></div>`).join("")}` : "";
+  const chips = prox.length ? `<h3 class="prox-t">Próximos partidos <small>toca uno</small></h3>${bloques.map(([t, g]) => `<div class="prox-g"><h4 class="prox-torneo">${esc(t)} <small>${g.length} ${g.length === 1 ? "partido" : "partidos"}</small></h4><div class="prox">${g.map(chipDe).join("")}</div></div>`).join("")}` : (tnProxDelCircuito().length ? `<p class="nota">No hay próximos partidos con ese filtro.</p>` : "");
   const campos = `${chips}<div class="cmp-fila">${tnCampoJugador("tn_a", "Jugador 1", TN.a)}${tnCampoJugador("tn_b", "Jugador 2", TN.b)}</div>
     <div class="cmp-fila"><label class="c"><span>Partido a</span><select id="tn_sets"><option value="3"${TN.sets === 3 ? " selected" : ""}>3 sets</option><option value="5"${TN.sets === 5 ? " selected" : ""}>5 sets (Grand Slam)</option></select></label>
     <label class="c"><span>&nbsp;</span><button type="button" class="buscar" id="tn_swap" style="margin:0;height:42px;background:var(--card);color:var(--fg)">⇄ Intercambiar</button></label></div><div id="tn_res"></div>`;
@@ -1344,7 +1365,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261110193846";
+  const BUILD = "20261110201605";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
