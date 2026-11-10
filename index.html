@@ -133,6 +133,8 @@ input[type=text]:focus{outline:none;border-color:var(--accent)}
 .tn-forma button{border:0;font-family:inherit;cursor:pointer;min-width:24px;min-height:28px}.tn-forma button.sel{outline:2px solid var(--fg);outline-offset:1px}
 .tn-det{margin-top:6px}.tn-det-in{background:var(--bg);border-radius:8px;padding:2px 10px}.tn-det .dest{font-size:.86rem}.tn-det .dest b{color:var(--fg);white-space:normal;text-align:right}
 
+#tn_res{scroll-margin-top:12px}
+
 footer{margin-top:22px;color:var(--muted);font-size:.75rem}
 </style>
 </head>
@@ -1014,8 +1016,9 @@ const tnDias = f => Math.round((Date.parse(TN.datos.hoy) - Date.parse(f)) / 864e
 const tnLimpiar = s => String(s || "").trim().replace(/\s+/g, " ");
 
 // ---- ELO y probabilidad ---------------------------------------------------------------------------------------------------------
-function tnElo(j, s) {                    // s = -1 (general) | 0 dura | 1 tierra | 2 hierba -> {v, n}
-  if (s < 0 || s > 2) return {v: j.elo[0], n: j.np[0], sup: false};
+function tnElo(j, s) {                    // s = -1 (general) | 0 dura | 1 tierra | 2 hierba | 3 indoor -> {v, n}
+  if (s < 0 || s > 3) return {v: j.elo[0], n: j.np[0], sup: false};
+  if (s === 3) return {v: j.elo[1], n: j.np[4] || 0, sup: true};      // indoor = dura cubierta: no hay ELO propio, se usa el de dura; n = partidos indoor desde 2015
   const n = j.np[s + 1];
   return {v: j.elo[s + 1], n, sup: true};
 }
@@ -1061,7 +1064,7 @@ function tnEnlazarCampo(id, alCambiar) {
 function tenisMostrar() {
   tnCargar(() => {
     const D = TN.datos;
-    const sup = ["Todas", ...TN_SUP.slice(0, 3)].map((n, k) => `<option value="${k - 1}"${TN.sup === k - 1 ? " selected" : ""}>${n}</option>`).join("");
+    const sup = ["Todas", ...TN_SUP.slice(0, 4)].map((n, k) => `<option value="${k - 1}"${TN.sup === k - 1 ? " selected" : ""}>${n}</option>`).join("");
     $("#tenis").innerHTML = `
       <div class="tabs" id="tn_tabs"><button data-sub="cmp" class="${TN.sub === "cmp" ? "act" : ""}">Comparar</button><button data-sub="jug" class="${TN.sub === "jug" ? "act" : ""}">Jugador</button></div>
       <div class="cmp-fila">
@@ -1135,7 +1138,7 @@ function tnComparar() {
   tnEnlazarCampo("tn_b", n => { TN.b = n; tnGuardar(); tnCuerpo(); });
   caja.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
     const p = D.prox[+c.dataset.k]; TN.a = D.jug[p[0]].n; TN.b = D.jug[p[1]].n; TN.sup = p[9]; TN.sets = 3; tnGuardar();
-    $("#tn_sup").value = String(TN.sup); tnCuerpo(); window.scrollTo({top: 0, behavior: "smooth"});
+    $("#tn_sup").value = String(TN.sup); tnCuerpo(); const res = $("#tn_res"); if (res) res.scrollIntoView({block: "start"});   // baja directo a las estadisticas del partido tocado, sin recorrer la lista de proximos
   }));
   $("#tn_sets").addEventListener("change", e => { TN.sets = +e.target.value; tnGuardar(); tnResultado(); });
   $("#tn_swap").addEventListener("click", () => { [TN.a, TN.b] = [TN.b, TN.a]; tnGuardar(); tnCuerpo(); });
@@ -1153,7 +1156,7 @@ function tnResultado() {
       <small>${j.rk ? `ranking oficial nº ${j.rk}` : "sin ranking oficial"} · ELO nº ${j.rkElo}</small><span class="tn-pr">${pr}%</span></div>`;
   let h = `<div class="cmp-cab">${tarjeta(A, ra, pa)}${tarjeta(B, rb, pb)}</div>
     <div class="tn-barra"><i style="width:${pa}%"></i></div>
-    <p class="nota">Probabilidad según ELO${sup ? ` (mitad ELO general, mitad ELO de ${TN_SUP[s].toLowerCase()})` : " (ELO general; elige una superficie para afinar)"} · cuota justa ${cuota(p)} / ${cuota(1 - p)}. Si la casa paga más que la cuota justa, hay valor.</p>`;
+    <p class="nota">Probabilidad según ELO${sup ? ` (mitad ELO general, mitad ELO de ${s === 3 ? "dura, que incluye la pista cubierta" : TN_SUP[s].toLowerCase()})` : " (ELO general; elige una superficie para afinar)"} · cuota justa ${cuota(p)} / ${cuota(1 - p)}. Si la casa paga más que la cuota justa, hay valor.</p>`;
 
   const pr = (D.prox || []).find(x => (x[0] === ia && x[1] === ib) || (x[0] === ib && x[1] === ia));
   if (pr && pr[2] != null) {                                          // modelo completo del bot (7 señales) y cuotas de Pinnacle, si el partido esta en la lista de proximos
@@ -1185,7 +1188,7 @@ function tnResultado() {
   const sn = s >= 0 ? TN_SUP[s].toLowerCase() : "";
   let t = `<table class="cmp-tabla"><thead><tr><th></th><th>${esc(A.n)}</th><th>${esc(B.n)}</th></tr></thead><tbody>`;
   t += fila("ELO general", A.elo[0], B.elo[0], "mayor");
-  if (s >= 0) t += fila(`ELO ${sn}`, A.elo[s + 1], B.elo[s + 1], "mayor") + fila(`Partidos en ${sn} (desde 2015)`, A.np[s + 1], B.np[s + 1], null);
+  if (s >= 0) t += fila(s === 3 ? "ELO dura (el indoor no tiene ELO propio)" : `ELO ${sn}`, A.elo[s === 3 ? 1 : s + 1], B.elo[s === 3 ? 1 : s + 1], "mayor") + fila(`Partidos en ${sn} (desde 2015)`, A.np[s === 3 ? 4 : s + 1], B.np[s === 3 ? 4 : s + 1], null);
   t += fila("Ranking oficial", A.rk ?? NaN, B.rk ?? NaN, "menor") + fila("Ranking ELO", A.rkElo, B.rkElo, "menor");
   t += fila("Mano / revés", `${A.ma || "–"} · ${A.re || "–"}`, `${B.ma || "–"} · ${B.re || "–"}`, null);
   t += fila("Altura (cm)", A.al ?? NaN, B.al ?? NaN, null);
@@ -1329,7 +1332,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261110110814";
+  const BUILD = "20261110183118";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
