@@ -1136,7 +1136,7 @@ function tnComparar() {
   const chipDe = ({p, k}) => `<button type="button" class="chip" data-k="${k}"><span class="chip-eq"><b>${esc(D.jug[p[0]].n)}</b><i>–</i><b>${esc(D.jug[p[1]].n)}</b></span><small>${tnDia(p[6])}${p[7] ? " " + esc(p[7]) : ""}</small>${p[9] >= 0 && p[9] <= 3 ? `<small class="tn-sup s${p[9]}">${TN_SUP[p[9]]}</small>` : ""}</button>`;
   const grupos = new Map();                                                       // un bloque por torneo: ATP/WTA primero, luego Challenger, luego ITF; dentro, por dia y hora
   prox.forEach(x => { const t = x.p[8] || "Otros"; if (!grupos.has(t)) grupos.set(t, []); grupos.get(t).push(x); });
-  const nivel = t => /Challenger/i.test(t) ? 1 : /^ITF/i.test(t) ? 2 : /^(ATP|WTA)/i.test(t) ? 0 : 1;
+  const nivel = t => /Challenger/i.test(t) ? 1 : /^ITF/i.test(t) ? 2 : /^UTR/i.test(t) ? 3 : /^(ATP|WTA)/i.test(t) ? 0 : 1;
   const fuerza = g => Math.max(...g.map(({p}) => D.jug[p[0]].elo[0] + D.jug[p[1]].elo[0]));
   grupos.forEach(g => g.sort((x, y) => x.p[6].localeCompare(y.p[6]) || (x.p[7] || "").localeCompare(y.p[7] || "")));   // dentro de cada torneo, por dia y hora
   const bloques = [...grupos.entries()].sort((a, b) => nivel(a[0]) - nivel(b[0]) || fuerza(b[1]) - fuerza(a[1]));
@@ -1172,11 +1172,12 @@ function tnResultado() {
   const pr = (D.prox || []).find(x => (x[0] === ia && x[1] === ib) || (x[0] === ib && x[1] === ia));
   if (pr && pr[2] != null) {                                          // modelo completo del bot (7 señales) y cuotas de Pinnacle, si el partido esta en la lista de proximos
     const dir = pr[0] === ia, pA = dir ? pr[2] : 1 - pr[2], cA = dir ? pr[4] : pr[5], cB = dir ? pr[5] : pr[4];
-    const valor = (p, c) => c ? `${p * c - 1 >= 0 ? "+" : ""}${Math.round((p * c - 1) * 100)} %` : "";
+    const valor = (p, c) => c ? `${p * c - 1 >= 0 ? "+" : "−"}${Math.abs(Math.round((p * c - 1) * 100))} %` : "–";
+    const cuota = x => tnComa(x.toFixed(2));
+    const fila2 = (nom, p, c) => `<tr><td>${esc(nom)}</td><td><b>${Math.round(p * 100)} %</b><small> · cuota ${cuota(1 / p)}</small></td><td>${c ? `<b>${cuota(c)}</b><small> · ${Math.round(100 / c)} %</small>` : "–"}</td><td class="${c && p * c >= 1 ? "alto" : ""}"><b>${valor(p, c)}</b></td></tr>`;
     h += `<div class="cmp-col" style="margin:6px 0"><h3>Modelo del bot <small>${esc(tnDia(pr[6]))} ${esc(pr[7])} · ${esc(pr[8])}${pr[3] ? " · confianza " + esc(pr[3]) : ""}</small></h3>
-      <div class="dest"><span>${esc(A.n)}</span><b>${Math.round(pA * 100)} %${cA ? ` · cuota ${tnComa(cA.toFixed(2))} · valor ${valor(pA, cA)}` : ""}</b></div>
-      <div class="dest"><span>${esc(B.n)}</span><b>${Math.round((1 - pA) * 100)} %${cB ? ` · cuota ${tnComa(cB.toFixed(2))} · valor ${valor(1 - pA, cB)}` : ""}</b></div>
-      <p class="nota">El modelo mezcla ELO, superficie, forma, cara a cara y calidad de rivales. "Valor" = probabilidad × cuota − 1.</p></div>`;
+      <table class="cmp-tabla"><thead><tr><th></th><th>Modelo</th><th>Pinnacle</th><th>Valor</th></tr></thead><tbody>${fila2(A.n, pA, cA)}${fila2(B.n, 1 - pA, cB)}</tbody></table>
+      <p class="nota">Modelo = probabilidad del bot y su cuota justa (1 ÷ probabilidad). Pinnacle = cuota de la casa y probabilidad que implica. Valor = probabilidad del modelo × cuota de Pinnacle − 1 (en verde si es positivo). El modelo mezcla ELO, superficie, forma, cara a cara y calidad de rivales.</p></div>`;
   }
   // cara a cara
   const hh = tnH2H(ia, ib), wa = hh.filter(x => x.gA).length, wb = hh.length - wa;
@@ -1343,7 +1344,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261110184453";
+  const BUILD = "20261110193526";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
