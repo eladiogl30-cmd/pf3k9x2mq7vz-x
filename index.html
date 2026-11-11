@@ -941,7 +941,7 @@ function buscarComparacion() {
 const TN = {formas: {}, datos: null, cargando: false, sub: "cmp", g: "H", a: "", b: "", sup: -1, tipo: -1, torneo: "", sets: 3, jug: "", stat: "tj", n: 15, lineas: {}, rival: "", cache: {}};
 try { Object.assign(TN, JSON.parse(localStorage.getItem("props_tenis_v1") || "{}")); } catch (e) {}
 TN.datos = null; TN.cargando = false; TN.cache = {};
-const tnGuardar = () => { try { localStorage.setItem("props_tenis_v1", JSON.stringify({sub: TN.sub, g: TN.g, a: TN.a, b: TN.b, sup: TN.sup, sets: TN.sets, jug: TN.jug, stat: TN.stat, n: TN.n, lineas: TN.lineas, rival: TN.rival})); } catch (e) {} };
+const tnGuardar = () => { try { localStorage.setItem("props_tenis_v1", JSON.stringify({sub: TN.sub, g: TN.g, a: TN.a, b: TN.b, sup: TN.sup, sets: TN.sets, jug: TN.jug, stat: TN.stat, saque: TN.saque, n: TN.n, lineas: TN.lineas, rival: TN.rival})); } catch (e) {} };
 const TN_SUP = ["Dura", "Tierra", "Hierba", "Indoor"];
 const tnTiposTorneo = () => TN.g === "M" ? [[0, "Grand Slam"], [1, "WTA"]] : [[0, "Grand Slam"], [1, "ATP"], [2, "Challenger"]];   // codigo de p[10] -> etiqueta
 const tnProxDelCircuito = () => (TN.datos.prox || []).map((p, k) => ({p, k})).filter(({p}) => TN.datos.jug[p[0]].g === TN.g);
@@ -1037,8 +1037,7 @@ const tnLimpiar = s => String(s || "").trim().replace(/\s+/g, " ");
 
 // ---- ELO y probabilidad ---------------------------------------------------------------------------------------------------------
 function tnElo(j, s) {                    // s = -1 (general) | 0 dura | 1 tierra | 2 hierba | 3 indoor -> {v, n}
-  if (s < 0 || s > 3) return {v: j.elo[0], n: j.np[0], sup: false};
-  if (s === 3) return {v: j.elo[1], n: j.np[4] || 0, sup: true};      // indoor = dura cubierta: no hay ELO propio, se usa el de dura; n = partidos indoor desde 2015
+  if (s < 0 || s > 3) return {v: j.elo[0], n: j.np[0], sup: false};     // 0 dura | 1 tierra | 2 hierba | 3 indoor: cada una con su ELO propio (elo[s + 1]) y su recuento de partidos (np[s + 1])
   const n = j.np[s + 1];
   return {v: j.elo[s + 1], n, sup: true};
 }
@@ -1190,17 +1189,17 @@ function tnResultado() {
       <small>${j.rk ? `ranking oficial nº ${j.rk}` : "sin ranking oficial"} · ELO nº ${j.rkElo}${j.pd ? " · pocos datos" : ""}</small><span class="tn-pr">${pr}%</span></div>`;
   let h = `<div class="cmp-cab">${tarjeta(A, ra, pa)}${tarjeta(B, rb, pb)}</div>
     <div class="tn-barra"><i style="width:${pa}%"></i></div>
-    <p class="nota">Probabilidad según ELO${sup ? ` (mitad ELO general, mitad ELO de ${s === 3 ? "dura, que incluye la pista cubierta" : TN_SUP[s].toLowerCase()})` : " (ELO general; elige una superficie para afinar)"} · cuota justa ${cuota(p)} / ${cuota(1 - p)}. Si la casa paga más que la cuota justa, hay valor.</p>`;
+    <p class="nota">Probabilidad según ELO${sup ? ` (mitad ELO general, mitad ELO de ${TN_SUP[s].toLowerCase()})` : " (ELO general; elige una superficie para afinar)"} · cuota justa ${cuota(p)} / ${cuota(1 - p)}. Si la casa paga más que la cuota justa, hay valor.</p>`;
 
   const pr = (D.prox || []).find(x => (x[0] === ia && x[1] === ib) || (x[0] === ib && x[1] === ia));
   if (pr && pr[2] != null) {                                          // modelo completo del bot (7 señales) y cuotas de Pinnacle, si el partido esta en la lista de proximos
     const dir = pr[0] === ia, pA = dir ? pr[2] : 1 - pr[2], cA = dir ? pr[4] : pr[5], cB = dir ? pr[5] : pr[4];
     const valor = (p, c) => c ? `${p * c - 1 >= 0 ? "+" : "−"}${Math.abs(Math.round((p * c - 1) * 100))} %` : "–";
     const cuota = x => tnComa(x.toFixed(2));
-    const fila2 = (nom, p, c) => `<tr><td>${esc(nom)}</td><td><b>${Math.round(p * 100)} %</b><small> · cuota ${cuota(1 / p)}</small></td><td>${c ? `<b>${cuota(c)}</b><small> · ${Math.round(100 / c)} %</small>` : "–"}</td><td class="${c && p * c >= 1 ? "alto" : ""}"><b>${valor(p, c)}</b></td></tr>`;
+    const fila2 = (nom, p, c) => `<tr><td>${esc(nom)}</td><td><b>${Math.round(p * 100)} %</b><small>cuota ${cuota(1 / p)}</small></td><td>${c ? `<b>${Math.round(100 / c)} %</b><small>cuota ${cuota(c)}</small>` : "–"}</td><td class="${c && p * c >= 1 ? "alto" : ""}"><b>${valor(p, c)}</b></td></tr>`;
     h += `<div class="cmp-col" style="margin:6px 0"><h3>Modelo del bot <small>${esc(tnDia(pr[6]))} ${esc(pr[7])} · ${esc(pr[8])}${pr[3] ? " · confianza " + esc(pr[3]) : ""}</small></h3>
       <table class="cmp-tabla"><thead><tr><th></th><th>Modelo</th><th>Pinnacle</th><th>Valor</th></tr></thead><tbody>${fila2(A.n, pA, cA)}${fila2(B.n, 1 - pA, cB)}</tbody></table>
-      <p class="nota">Modelo = probabilidad del bot y su cuota justa (1 ÷ probabilidad). Pinnacle = cuota de la casa y probabilidad que implica. Valor = probabilidad del modelo × cuota de Pinnacle − 1 (en verde si es positivo). El modelo mezcla ELO, superficie, forma, cara a cara y calidad de rivales.</p></div>`;
+      <p class="nota">En las dos columnas: probabilidad en grande y cuota debajo. Modelo = probabilidad del bot y su cuota justa (1 ÷ probabilidad). Pinnacle = la cuota de la casa y la probabilidad que implica. Valor = probabilidad del modelo × cuota de Pinnacle − 1 (en verde si es positivo). El modelo mezcla ELO, superficie, forma, cara a cara y calidad de rivales.</p></div>`;
   }
   // cara a cara
   const hh = tnH2H(ia, ib), wa = hh.filter(x => x.gA).length, wb = hh.length - wa;
@@ -1223,7 +1222,7 @@ function tnResultado() {
   const sn = s >= 0 ? TN_SUP[s].toLowerCase() : "";
   let t = `<table class="cmp-tabla"><thead><tr><th></th><th>${esc(A.n)}</th><th>${esc(B.n)}</th></tr></thead><tbody>`;
   t += fila("ELO general", A.elo[0], B.elo[0], "mayor");
-  if (s >= 0) t += fila(s === 3 ? "ELO dura (el indoor no tiene ELO propio)" : `ELO ${sn}`, A.elo[s === 3 ? 1 : s + 1], B.elo[s === 3 ? 1 : s + 1], "mayor") + fila(`Partidos en ${sn} (desde 2015)`, A.np[s === 3 ? 4 : s + 1], B.np[s === 3 ? 4 : s + 1], null);
+  if (s >= 0) t += fila(`ELO ${sn}`, A.elo[s + 1] || NaN, B.elo[s + 1] || NaN, "mayor") + fila(`Partidos en ${sn} (desde 2015)`, A.np[s + 1], B.np[s + 1], null);
   t += fila("Ranking oficial", A.rk ?? NaN, B.rk ?? NaN, "menor") + fila("Ranking ELO", A.rkElo, B.rkElo, "menor");
   t += fila("Mano / revés", `${A.ma || "–"} · ${A.re || "–"}`, `${B.ma || "–"} · ${B.re || "–"}`, null);
   t += fila("Altura (cm)", A.al ?? NaN, B.al ?? NaN, null);
@@ -1250,21 +1249,34 @@ function tnResultado() {
   h += `<p class="nota">Ranking oficial a fecha ${esc(D.rank_fecha || "?")}. ELO = ranking propio calculado con todos los partidos desde 2015. El tie-break "a 10" cuenta como 1 juego. Verde = 80 % o más. Solo informativo.</p>`;
   $("#tn_res").innerHTML = h;
   tnEnlazarForma($("#tn_res"));
+  const selS = $("#tn_saque"); if (selS) selS.addEventListener("change", e => { TN.saque = e.target.value; tnGuardar(); const y = window.scrollY; tnResultado(); window.scrollTo(0, y); });
 }
-const TN_SAQUE_N = 10, TN_SAQUE_MIN = 3;        // ultimos 10 partidos con estadisticas; menos de 3 no se muestra
+const TN_SAQUE_MIN = 3;                          // con menos de 3 partidos con estadisticas no se muestra
+const TN_SAQUE_OPC = [["10", "Últimos 10"], ["20", "Últimos 20"], ["30", "Últimos 30"], ["anio", "Este año"], ["pasado", "Año pasado"], ["carrera", "Toda la carrera"]];
+const tnSaqueLista = (todos) => {                                    // partidos con estadisticas segun lo elegido (por defecto los ultimos 10)
+  const op = TN.saque || "10", anio = +TN.datos.hoy.slice(0, 4);
+  if (op === "anio") return todos.filter(x => +x.f.slice(0, 4) === anio);
+  if (op === "pasado") return todos.filter(x => +x.f.slice(0, 4) === anio - 1);
+  if (op === "carrera") return todos;
+  return todos.slice(0, +op || 10);
+};
+const tnSaqueTexto = () => ({"10": "los últimos 10 partidos", "20": "los últimos 20 partidos", "30": "los últimos 30 partidos", anio: "los partidos de este año", pasado: "los partidos del año pasado", carrera: "todos los partidos disponibles"})[TN.saque || "10"];
 const TN_SAQUE = [                               // [texto, clave, mejor ('mayor'|'menor'|null), es porcentaje]
   ["Aces por partido", "ac", "mayor", false], ["Dobles faltas por partido", "df", "menor", false], ["Primeros saques dentro", "p1", "mayor", true],
   ["Puntos ganados con el 1er saque", "w1", "mayor", true], ["Puntos ganados con el 2º saque", "w2", "mayor", true], ["Juegos de saque ganados", "hold", "mayor", true],
   ["Juegos de resto ganados (break)", "brk", "mayor", true], ["Bolas de break convertidas por partido", "bpc", "mayor", false], ["Duración media (min)", "min", null, false]];
 function tnMediaSaque(i, s) {
-  const p = tnPartidos(i).filter(x => x.st && (s < 0 || x.s === s)).slice(0, TN_SAQUE_N), r = {n: p.length};
+  const q = k => ({f: k[0], s: k[2], st: {ac: k[1][0], df: k[1][1], p1: k[1][2], w1: k[1][3], w2: k[1][4], hold: k[1][5], brk: k[1][6], bpc: k[1][7], bpf: k[1][8], bps: k[1][9], min: k[1][10], acr: k[1][11], dfr: k[1][12]}});
+  const viejos = (TN.datos.jug[i].ms || []).map(q);                                  // estadisticas de partidos anteriores a la ventana de partidos (con su superficie)
+  const p = tnSaqueLista(tnPartidos(i).filter(x => x.st && (s < 0 || x.s === s)).concat(viejos.filter(x => s < 0 || x.s === s))), r = {n: p.length};
   for (const [, k] of TN_SAQUE) r[k] = tnMedia(p.map(x => x.st[k]).filter(v => v != null));
   r.acT = tnMedia(p.filter(x => x.st.ac != null && x.st.acr != null).map(x => x.st.ac + x.st.acr));
   return r;
 }
 function tnBloqueSaque(A, B, ia, ib, s) {
   const a = tnMediaSaque(ia, s), b = tnMediaSaque(ib, s), sn = s >= 0 ? " en " + TN_SUP[s].toLowerCase() : "";
-  if (a.n < TN_SAQUE_MIN && b.n < TN_SAQUE_MIN) return `<h2>Saque y resto</h2><p class="nota">Casi no hay estadísticas de saque de estos jugadores${sn} (solo desde junio de 2026 y no en todos los partidos).</p>`;
+  const sel = `<label class="c" style="margin:0 0 6px"><span>Partidos</span><select id="tn_saque">${TN_SAQUE_OPC.map(([v, n]) => `<option value="${v}"${(TN.saque || "10") === v ? " selected" : ""}>${n}</option>`).join("")}</select></label>`;
+  if (a.n < TN_SAQUE_MIN && b.n < TN_SAQUE_MIN) return `<h2>Saque y resto</h2>${sel}<p class="nota">Casi no hay estadísticas de saque de estos jugadores en ${tnSaqueTexto()}${sn} (solo las hay desde 2023 y no en todos los partidos).</p>`;
   const celda = (x, r, k, pc, mejorA) => !Number.isFinite(r[k]) || r.n < TN_SAQUE_MIN ? `<td><b>–</b></td>` : `<td class="${mejorA ? "alto" : ""}"><b>${tnFmt1(r[k])}${pc ? "%" : ""}</b></td>`;
   let t = `<table class="cmp-tabla"><thead><tr><th></th><th>${esc(A.n)}</th><th>${esc(B.n)}</th></tr></thead><tbody>`;
   for (const [txt, k, mejor, pc] of TN_SAQUE) {
@@ -1274,7 +1286,7 @@ function tnBloqueSaque(A, B, ia, ib, s) {
   }
   t += `<tr><td>Partidos con estadísticas</td><td><b>${a.n}</b></td><td><b>${b.n}</b></td></tr></tbody></table>`;
   const aces = a.n >= TN_SAQUE_MIN && b.n >= TN_SAQUE_MIN && Number.isFinite(a.ac) && Number.isFinite(b.ac) ? `Aces esperados en el partido ≈ <b>${tnFmt1(a.ac + b.ac)}</b> (suma de lo que saca cada uno de media). ` : "";
-  return `<h2>Saque y resto</h2><p class="nota">Media de los últimos ${TN_SAQUE_N} partidos con estadísticas${sn} (sin retiradas). ${aces}Verde = mejor de los dos.</p>${t}`;
+  return `<h2>Saque y resto</h2>${sel}<p class="nota">Media de ${tnSaqueTexto()} con estadísticas${sn} (sin retiradas). Hay estadísticas de saque desde 2023, pero no de todos los partidos. ${aces}Verde = mejor de los dos.</p>${t}`;
 }
 function tnCelda(f) {
   const alto = f.n >= TN_MIN && f.k / f.n >= 0.8, bajo = f.n && f.k / f.n <= 0.2;
@@ -1367,7 +1379,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261111083759";
+  const BUILD = "20261111095302";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
