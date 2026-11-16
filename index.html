@@ -851,6 +851,19 @@ window.addEventListener("popstate", e => {
 });
 try { history.replaceState({nav: 0}, ""); } catch (e) {}
 document.addEventListener("click", e => { if (e.target.closest("#atras")) history.back(); });
+// red de seguridad: cualquier clic o cambio que modifique el estado (y que no haya guardado ya su paso) deja su entrada en el historial
+const navClave = c => JSON.stringify({ST: c.ST, TN: c.TN});
+function navVigilar(e) {
+  if (e.target.closest && e.target.closest("#atras")) return;
+  const antes = navClon(), n0 = NAV.pila.length;
+  setTimeout(() => {
+    if (NAV.pila.length !== n0) return;                                   // ya guardo su paso (navSalto explicito)
+    if (navClave(antes) === navClave(navClon())) return;                  // no cambio nada
+    NAV.pila.push(antes); try { history.pushState({nav: NAV.pila.length}, ""); } catch (x) {} navBoton();
+  }, 30);
+}
+document.addEventListener("click", navVigilar, true);
+document.addEventListener("change", navVigilar, true);
 const IR = [];
 const regIr = f => (IR.push(f), IR.length - 1);
 document.addEventListener("click", e => { const el = e.target.closest("[data-ir]"); if (el) IR[Number(el.dataset.ir)](); });
@@ -1411,7 +1424,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261116225857";
+  const BUILD = "20261116231906";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
