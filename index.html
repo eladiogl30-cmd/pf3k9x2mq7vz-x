@@ -1121,12 +1121,12 @@ function tenisMostrar() {
       </div>
       ${tnListaJugadores()}
       <div id="tn_cuerpo"></div>`;
-    $("#tn_g").addEventListener("change", e => { TN.g = e.target.value; TN.tipo = -1; TN.torneo = ""; tnDefectos(); tnGuardar(); tenisMostrar(); });
+    $("#tn_g").addEventListener("change", e => { navSalto(); TN.g = e.target.value; TN.tipo = -1; TN.torneo = ""; tnDefectos(); tnGuardar(); tenisMostrar(); });
     $("#tn_tipo").addEventListener("change", e => { TN.tipo = +e.target.value; TN.torneo = ""; tnPintarFiltros(); tnCuerpo(); });
     $("#tn_tor").addEventListener("change", e => { TN.torneo = e.target.value; tnCuerpo(); });
     tnPintarFiltros();
     $("#tn_sup").addEventListener("change", e => { TN.sup = +e.target.value; tnGuardar(); tnCuerpo(); });
-    document.querySelectorAll("#tn_tabs button").forEach(b => b.addEventListener("click", () => { TN.sub = b.dataset.sub; tnGuardar(); tenisMostrar(); }));
+    document.querySelectorAll("#tn_tabs button").forEach(b => b.addEventListener("click", () => { if (TN.sub !== b.dataset.sub) navSalto(); TN.sub = b.dataset.sub; tnGuardar(); tenisMostrar(); }));
     tnCuerpo();
   });
 }
@@ -1192,14 +1192,14 @@ function tnComparar() {
     <div class="cmp-fila"><label class="c"><span>Partido a</span><select id="tn_sets"><option value="3"${TN.sets === 3 ? " selected" : ""}>3 sets</option><option value="5"${TN.sets === 5 ? " selected" : ""}>5 sets (Grand Slam)</option></select></label>
     <label class="c"><span>&nbsp;</span><button type="button" class="buscar" id="tn_swap" style="margin:0;height:42px;background:var(--card);color:var(--fg)">⇄ Intercambiar</button></label></div><div id="tn_res"></div>`;
   caja.innerHTML = campos;
-  tnEnlazarCampo("tn_a", n => { TN.a = n; tnGuardar(); tnCuerpo(); });
-  tnEnlazarCampo("tn_b", n => { TN.b = n; tnGuardar(); tnCuerpo(); });
+  tnEnlazarCampo("tn_a", n => { if (TN.a !== n) navSalto(); TN.a = n; tnGuardar(); tnCuerpo(); });
+  tnEnlazarCampo("tn_b", n => { if (TN.b !== n) navSalto(); TN.b = n; tnGuardar(); tnCuerpo(); });
   caja.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
     navSalto(); const p = D.prox[+c.dataset.k]; TN.a = D.jug[p[0]].n; TN.b = D.jug[p[1]].n; TN.sup = p[9]; TN.sets = 3; tnGuardar();
     $("#tn_sup").value = String(TN.sup); tnCuerpo(); const res = $("#tn_res"); if (res) res.scrollIntoView({block: "start"});   // baja directo a las estadisticas del partido tocado, sin recorrer la lista de proximos
   }));
   $("#tn_sets").addEventListener("change", e => { TN.sets = +e.target.value; tnGuardar(); tnResultado(); });
-  $("#tn_swap").addEventListener("click", () => { [TN.a, TN.b] = [TN.b, TN.a]; tnGuardar(); tnCuerpo(); });
+  $("#tn_swap").addEventListener("click", () => { navSalto(); [TN.a, TN.b] = [TN.b, TN.a]; tnGuardar(); tnCuerpo(); });
   if (ia === undefined || ib === undefined || ia === ib) { $("#tn_res").innerHTML = '<p class="vacio">Elige dos jugadores distintos del mismo circuito.</p>'; return; }
   tnResultado();
 }
@@ -1361,7 +1361,7 @@ function tnJugador() {
     <div class="cmp-fila"><label class="c"><span>Contra</span><select id="tn_riv">${opc("", "Todos los rivales", !TN.rival)}${rivales.map(r => opc(r, r, TN.rival === r)).join("")}</select></label></div>
     <div class="linea"><button type="button" id="tn_menos" aria-label="Bajar la línea">−</button><input type="number" id="tn_linea" step="0.5" min="0" inputmode="decimal" aria-label="Línea"><button type="button" id="tn_mas" aria-label="Subir la línea">+</button></div>
     <div id="tn_barras"></div>`;
-  tnEnlazarCampo("tn_j", n => { TN.jug = n; TN.rival = ""; tnGuardar(); tnCuerpo(); });
+  tnEnlazarCampo("tn_j", n => { if (TN.jug !== n) navSalto(); TN.jug = n; TN.rival = ""; tnGuardar(); tnCuerpo(); });
   const redibujar = () => { tnGuardar(); tnBarras(); };
   $("#tn_stat").addEventListener("change", e => { TN.stat = e.target.value; tnGuardar(); tnCuerpo(); });
   $("#tn_n").addEventListener("change", e => { TN.n = +e.target.value; redibujar(); });
@@ -1411,7 +1411,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261116200519";
+  const BUILD = "20261116225857";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
