@@ -1072,7 +1072,8 @@ function tnFila(r) {                      // r = fila de partidos del jugador ->
 // REGLA DE LAS ESTADISTICAS DE SAQUE: de cada jugador solo se usan desde la fecha en que tenemos estadisticas de TODOS sus partidos (sin contar retiradas ni los de despues de la ultima fecha copiada).
 // Basta un partido suyo sin estadisticas (y que no sea retirada) para que todo lo anterior deje de usarse: asi las medias y las recomendaciones no mezclan partidos con datos y partidos sin ellos.
 const TN_SIN_STATS = /davis|fed cup|billie jean/i;      // Copa Davis y Fed Cup: no se copian sus estadisticas, no cuentan como hueco
-const TN_ST_DESDE = "2026-06-21";               // ultimo dia SIN copia: se usan estadisticas desde el 22-jun-2026
+const TN_ST_DESDE = "2026-08-31";               // ultimo dia SIN usar: las estadisticas cuentan desde el 1-sep-2026 (septiembre se da por copiado al 100 %: faltan 9 partidos con marcador que no estan en ninguna web)
+const TN_HUECO_DESDE = "2026-09-30";            // los huecos de septiembre o anteriores se dan por buenos; solo un hueco posterior recorta la muestra de un jugador
 function tnFrontera() {                   // ultima fecha con estadisticas copiadas: lo posterior aun no se ha copiado, no es un hueco
   if (TN.frontera) return TN.frontera;
   let m = "";
@@ -1084,8 +1085,8 @@ function tnPartidos(i) {                  // partidos del jugador (mas recientes
   if (!TN.cache[i]) {
     const arr = D.jug[i].m.map(tnFila), fr = tnFrontera();
     let corte = "";
-    for (const x of arr) { if (x.f > fr || x.ret || TN_SIN_STATS.test(x.cat || "")) continue; if (!x.st) { if (x.f > corte) corte = x.f; } }
-    if (corte < TN_ST_DESDE) corte = TN_ST_DESDE;           // las estadisticas de saque se cuentan desde que empezo la copia completa (22-jun-2026): lo anterior es salteado y no se usa
+    for (const x of arr) { if (x.f > fr || x.ret || TN_SIN_STATS.test(x.cat || "")) continue; if (!x.st && x.f > TN_HUECO_DESDE) { if (x.f > corte) corte = x.f; } }
+    if (corte < TN_ST_DESDE) corte = TN_ST_DESDE;           // las estadisticas de saque se cuentan desde el 1-sep-2026: lo anterior no se usa
     for (const x of arr) if (x.f <= corte) delete x.st;
     arr.corteSt = corte;                  // fecha del partido mas reciente sin estadisticas ("" = ninguno en la ventana)
     TN.cache[i] = arr;
@@ -1375,7 +1376,7 @@ function tnMediaSaque(i, s) {
 function tnBloqueSaque(A, B, ia, ib, s) {
   const a = tnMediaSaque(ia, s), b = tnMediaSaque(ib, s), sn = s >= 0 ? " en " + TN_SUP[s].toLowerCase() : "";
   const sel = `<label class="c" style="margin:0 0 6px"><span>Partidos</span><select id="tn_saque">${TN_SAQUE_OPC.map(([v, n]) => `<option value="${v}"${(TN.saque || "10") === v ? " selected" : ""}>${n}</option>`).join("")}</select></label>`;
-  if (a.n < TN_SAQUE_MIN && b.n < TN_SAQUE_MIN) return `<h2>Saque y resto</h2>${sel}<p class="nota">Casi no hay estadísticas de saque de estos jugadores en ${tnSaqueTexto()}${sn} (de cada jugador solo se usan los partidos desde que tenemos estadísticas de todos los suyos).</p>`;
+  if (a.n < TN_SAQUE_MIN && b.n < TN_SAQUE_MIN) return `<h2>Saque y resto</h2>${sel}<p class="nota">Casi no hay estadísticas de saque de estos jugadores en ${tnSaqueTexto()}${sn} (las estadísticas de saque cuentan desde el 1 de septiembre de 2026; de cada jugador solo se usan los partidos desde que tenemos estadísticas de todos los suyos).</p>`;
   const celda = (x, r, k, pc, mejorA) => !Number.isFinite(r[k]) || r.n < TN_SAQUE_MIN ? `<td><b>–</b></td>` : `<td class="${mejorA ? "alto" : ""}"><b>${tnFmt1(r[k])}${pc ? "%" : ""}</b></td>`;
   let t = `<table class="cmp-tabla"><thead><tr><th></th><th>${esc(A.n)}</th><th>${esc(B.n)}</th></tr></thead><tbody>`;
   for (const [txt, k, mejor, pc] of TN_SAQUE) {
@@ -1385,7 +1386,7 @@ function tnBloqueSaque(A, B, ia, ib, s) {
   }
   t += `<tr><td>Partidos con estadísticas</td><td><b>${a.n}</b></td><td><b>${b.n}</b></td></tr></tbody></table>`;
   const aces = a.n >= TN_SAQUE_MIN && b.n >= TN_SAQUE_MIN && Number.isFinite(a.ac) && Number.isFinite(b.ac) ? `Aces esperados en el partido ≈ <b>${tnFmt1(a.ac + b.ac)}</b> (suma de lo que saca cada uno de media). ` : "";
-  return `<h2>Saque y resto</h2>${sel}<p class="nota">Media de ${tnSaqueTexto()} con estadísticas${sn} (sin retiradas). De cada jugador solo cuentan los partidos desde que tenemos estadísticas de todos los suyos. ${aces}Verde = mejor de los dos.</p>${t}`;
+  return `<h2>Saque y resto</h2>${sel}<p class="nota">Media de ${tnSaqueTexto()} con estadísticas${sn} (sin retiradas). Las estadísticas cuentan desde el 1 de septiembre de 2026, y de cada jugador solo los partidos desde que tenemos las de todos los suyos. ${aces}Verde = mejor de los dos.</p>${t}`;
 }
 function tnCelda(f) {
   const alto = f.n >= TN_MIN && f.k / f.n >= 0.8, bajo = f.n && f.k / f.n <= 0.2;
@@ -1446,7 +1447,7 @@ function tnBarras() {
   function s_ok(x) { return (TN.sup < 0 || x.s === TN.sup) && (!TN.rival || x.riv === TN.rival); }
   d = d.slice(0, TN.n).reverse();                                       // cronologico: el ultimo a la derecha
   const cont = $("#tn_barras");
-  if (!d.length) { cont.innerHTML = `<p class="vacio">${def[3] ? "No hay partidos con estadísticas de saque con esos filtros (de cada jugador solo cuentan los partidos desde que tenemos estadísticas de todos los suyos)." : "No hay partidos con marcador completo con esos filtros."}</p>`; return; }
+  if (!d.length) { cont.innerHTML = `<p class="vacio">${def[3] ? "No hay partidos con estadísticas de saque con esos filtros (las estadísticas cuentan desde el 1 de septiembre de 2026, y de cada jugador solo desde que tenemos las de todos sus partidos)." : "No hay partidos con marcador completo con esos filtros."}</p>`; return; }
   const vals = d.map(x => def[1](x)), max = Math.max(...vals, linea) * 1.15 + 1, alto = 200;
   const sup = vals.filter(v => v > linea).length, ig = vals.filter(v => v === linea).length;
   const barras = d.map((x, k) => {
@@ -1478,7 +1479,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261117171128";
+  const BUILD = "20261117172850";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
