@@ -1071,6 +1071,7 @@ function tnFila(r) {                      // r = fila de partidos del jugador ->
 }
 // REGLA DE LAS ESTADISTICAS DE SAQUE: de cada jugador solo se usan desde la fecha en que tenemos estadisticas de TODOS sus partidos (sin contar retiradas ni los de despues de la ultima fecha copiada).
 // Basta un partido suyo sin estadisticas (y que no sea retirada) para que todo lo anterior deje de usarse: asi las medias y las recomendaciones no mezclan partidos con datos y partidos sin ellos.
+const TN_SIN_STATS = /davis|fed cup|billie jean/i;      // Copa Davis y Fed Cup: no se copian sus estadisticas, no cuentan como hueco
 const TN_ST_DESDE = "2026-06-21";               // ultimo dia SIN copia: se usan estadisticas desde el 22-jun-2026
 function tnFrontera() {                   // ultima fecha con estadisticas copiadas: lo posterior aun no se ha copiado, no es un hueco
   if (TN.frontera) return TN.frontera;
@@ -1083,7 +1084,7 @@ function tnPartidos(i) {                  // partidos del jugador (mas recientes
   if (!TN.cache[i]) {
     const arr = D.jug[i].m.map(tnFila), fr = tnFrontera();
     let corte = "";
-    for (const x of arr) { if (x.f > fr || x.ret) continue; if (!x.st) { if (x.f > corte) corte = x.f; } }
+    for (const x of arr) { if (x.f > fr || x.ret || TN_SIN_STATS.test(x.cat || "")) continue; if (!x.st) { if (x.f > corte) corte = x.f; } }
     if (corte < TN_ST_DESDE) corte = TN_ST_DESDE;           // las estadisticas de saque se cuentan desde que empezo la copia completa (22-jun-2026): lo anterior es salteado y no se usa
     for (const x of arr) if (x.f <= corte) delete x.st;
     arr.corteSt = corte;                  // fecha del partido mas reciente sin estadisticas ("" = ninguno en la ventana)
@@ -1477,7 +1478,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261117165217";
+  const BUILD = "20261117171128";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
