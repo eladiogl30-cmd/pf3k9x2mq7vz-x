@@ -995,7 +995,7 @@ const tnProxFiltrados = () => tnProxDelCircuito().filter(({p}) => (TN.tipo < 0 |
 function tnPintarFiltros() {                                                       // casillas "Tipo de torneo" y "Torneo" (solo los torneos detectados hoy/mañana)
   const caja = $("#tn_filtros"); if (!caja) return;
   const del = tnProxDelCircuito();
-  caja.style.display = TN.sub === "cmp" && del.length ? "" : "none";
+  caja.style.display = TN.sub !== "jug" && del.length ? "" : "none";
   if (TN.tipo >= 0 && !tnTiposTorneo().some(t => t[0] === TN.tipo)) TN.tipo = -1;
   const tipoDe = new Map(del.map(({p}) => [p[8], p[10]]));
   const tors = [...new Set(del.filter(({p}) => TN.tipo < 0 || p[10] === TN.tipo).map(({p}) => p[8]))].sort((x, y) => tipoDe.get(x) - tipoDe.get(y) || x.localeCompare(y));      // Grand Slam, ATP/WTA, Challenger; dentro, A-Z
@@ -1151,7 +1151,7 @@ function tenisMostrar() {
     const D = TN.datos;
     const sup = ["Todas", ...TN_SUP.slice(0, 4)].map((n, k) => `<option value="${k - 1}"${TN.sup === k - 1 ? " selected" : ""}>${n}</option>`).join("");
     $("#tenis").innerHTML = `
-      <div class="tabs" id="tn_tabs"><button data-sub="cmp" class="${TN.sub === "cmp" ? "act" : ""}">Comparar</button><button data-sub="jug" class="${TN.sub === "jug" ? "act" : ""}">Jugador</button></div>
+      <div class="tabs" id="tn_tabs"><button data-sub="cmp" class="${TN.sub === "cmp" ? "act" : ""}">Comparar</button><button data-sub="jug" class="${TN.sub === "jug" ? "act" : ""}">Jugador</button><button data-sub="rec" class="${TN.sub === "rec" ? "act" : ""}">Recomendaciones</button></div>
       <div class="cmp-fila">
         <label class="c"><span>Circuito</span><select id="tn_g"><option value="H"${TN.g === "H" ? " selected" : ""}>Hombres (ATP y Challenger)</option><option value="M"${TN.g === "M" ? " selected" : ""}>Mujeres (WTA)</option></select></label>
         <label class="c cmp-sede"><span>Superficie</span><select id="tn_sup">${sup}</select></label>
@@ -1171,7 +1171,7 @@ function tenisMostrar() {
     tnCuerpo();
   });
 }
-function tnCuerpo() { TN.sub === "cmp" ? tnComparar() : tnJugador(); }
+function tnCuerpo() { TN.sub === "cmp" ? tnComparar() : TN.sub === "rec" ? tnRecomendaciones() : tnJugador(); }
 
 // ---- Comparar ---------------------------------------------------------------------------------------------------------------------
 function tnResumenJugador(i, s) {
@@ -1242,28 +1242,34 @@ function tnRecsPartido(p) {                // hasta 6: alterna jugador 1 / jugad
   return out.sort((x, y) => y.t.k / y.t.n - x.t.k / x.t.n || y.t.n - x.t.n);
 }
 
-function tnComparar() {
-  const D = TN.datos, ia = D.pos.get(TN.a), ib = D.pos.get(TN.b);
-  const caja = $("#tn_cuerpo");
+function tnProxBloques() {                 // proximos partidos del filtro, en un bloque por torneo: ATP/WTA primero, luego Challenger, luego ITF; dentro, por dia y hora
+  const D = TN.datos;
   const prox = tnProxFiltrados().sort((x, y) => x.p[6].localeCompare(y.p[6]) || (D.jug[y.p[0]].elo[0] + D.jug[y.p[1]].elo[0]) - (D.jug[x.p[0]].elo[0] + D.jug[x.p[1]].elo[0]));      // todos: por dia y, dentro del dia, los de mas nivel primero
-  const filaRec = (o, p) => { const j = D.jug[o.i]; return `<div class="av ir tn-rec" data-i="${o.i}" data-st="${o.k}" data-l="${o.l}" data-sup="${p[9]}"><b class="avc">${esc((j.nc || j.n).split(" ").pop().slice(0, 9))}</b><span>${esc(o.txt)}</span><em>${o.t.k}/${o.t.n} · ${Math.round(100 * o.t.k / o.t.n)}%</em></div>`; };
-  const chipDe = ({p, k}) => { const rs = tnRecsPartido(p); return `<div class="pcard"><button type="button" class="chip" data-k="${k}"><span class="chip-eq"><b>${esc(D.jug[p[0]].n)}</b><i>–</i><b>${esc(D.jug[p[1]].n)}</b></span><small>${tnDia(p[6])}${p[7] ? " " + esc(p[7]) : ""}</small>${p[9] >= 0 && p[9] <= 3 ? `<small class="tn-sup s${p[9]}">${TN_SUP[p[9]]}</small>` : ""}</button>${rs.length ? rs.map(o => filaRec(o, p)).join("") : `<p class="av-vacio">Nada llega al 75 % todavía.</p>`}</div>`; };
-  const grupos = new Map();                                                       // un bloque por torneo: ATP/WTA primero, luego Challenger, luego ITF; dentro, por dia y hora
+  const grupos = new Map();
   prox.forEach(x => { const t = x.p[8] || "Otros"; if (!grupos.has(t)) grupos.set(t, []); grupos.get(t).push(x); });
   const nivel = t => /Challenger/i.test(t) ? 1 : /^ITF/i.test(t) ? 2 : /^UTR/i.test(t) ? 3 : /^(ATP|WTA)/i.test(t) ? 0 : 1;
   const fuerza = g => Math.max(...g.map(({p}) => D.jug[p[0]].elo[0] + D.jug[p[1]].elo[0]));
   grupos.forEach(g => g.sort((x, y) => x.p[6].localeCompare(y.p[6]) || (x.p[7] || "").localeCompare(y.p[7] || "")));   // dentro de cada torneo, por dia y hora
-  const bloques = [...grupos.entries()].sort((a, b) => nivel(a[0]) - nivel(b[0]) || fuerza(b[1]) - fuerza(a[1]));
-  const chips = prox.length ? `<h3 class="prox-t">Próximos partidos <small>toca uno</small></h3>${bloques.map(([t, g]) => `<div class="prox-g"><h4 class="prox-torneo">${esc(t)} <small>${g.length} ${g.length === 1 ? "partido" : "partidos"}</small></h4><div class="prox">${g.map(chipDe).join("")}</div></div>`).join("")}` : (tnProxDelCircuito().length ? `<p class="nota">No hay próximos partidos con ese filtro.</p>` : "");
+  return {prox, bloques: [...grupos.entries()].sort((a, b) => nivel(a[0]) - nivel(b[0]) || fuerza(b[1]) - fuerza(a[1]))};
+}
+const tnChipTxt = ({p, k}) => { const D = TN.datos; return `<button type="button" class="chip" data-k="${k}"><span class="chip-eq"><b>${esc(D.jug[p[0]].n)}</b><i>–</i><b>${esc(D.jug[p[1]].n)}</b></span><small>${tnDia(p[6])}${p[7] ? " " + esc(p[7]) : ""}</small>${p[9] >= 0 && p[9] <= 3 ? `<small class="tn-sup s${p[9]}">${TN_SUP[p[9]]}</small>` : ""}</button>`; };
+const tnBloquesHtml = (bloques, chipDe, titulo) => `<h3 class="prox-t">${titulo}</h3>${bloques.map(([t, g]) => `<div class="prox-g"><h4 class="prox-torneo">${esc(t)} <small>${g.length} ${g.length === 1 ? "partido" : "partidos"}</small></h4><div class="prox">${g.map(chipDe).join("")}</div></div>`).join("")}`;
+function tnIrAPartido(k) {                 // abre Comparar con los dos jugadores del proximo partido k y baja a sus estadisticas
+  const D = TN.datos, p = D.prox[k];
+  navSalto(); TN.sub = "cmp"; TN.a = D.jug[p[0]].n; TN.b = D.jug[p[1]].n; TN.sup = p[9]; TN.sets = 3; tnGuardar(); tenisMostrar();
+  setTimeout(() => { const res = $("#tn_res"); if (res) res.scrollIntoView({block: "start"}); }, 0);
+}
+function tnComparar() {
+  const D = TN.datos, ia = D.pos.get(TN.a), ib = D.pos.get(TN.b);
+  const caja = $("#tn_cuerpo");
+  const {prox, bloques} = tnProxBloques();
+  const chips = prox.length ? tnBloquesHtml(bloques, tnChipTxt, `Próximos partidos <small>toca uno</small>`) : (tnProxDelCircuito().length ? `<p class="nota">No hay próximos partidos con ese filtro.</p>` : "");
   const campos = `${chips}<div class="cmp-fila">${tnCampoJugador("tn_a", "Jugador 1", TN.a)}${tnCampoJugador("tn_b", "Jugador 2", TN.b)}</div>
     <div class="cmp-fila"><label class="c"><span>Partido a</span><select id="tn_sets"><option value="3"${TN.sets === 3 ? " selected" : ""}>3 sets</option><option value="5"${TN.sets === 5 ? " selected" : ""}>5 sets (Grand Slam)</option></select></label>
     <label class="c"><span>&nbsp;</span><button type="button" class="buscar" id="tn_swap" style="margin:0;height:42px;background:var(--card);color:var(--fg)">⇄ Intercambiar</button></label></div><div id="tn_res"></div>`;
   caja.innerHTML = campos;
   tnEnlazarCampo("tn_a", n => { if (TN.a !== n) navSalto(); TN.a = n; tnGuardar(); tnCuerpo(); });
   tnEnlazarCampo("tn_b", n => { if (TN.b !== n) navSalto(); TN.b = n; tnGuardar(); tnCuerpo(); });
-  caja.querySelectorAll(".tn-rec").forEach(r => r.addEventListener("click", () => {
-    navSalto(); TN.sub = "jug"; TN.jug = D.jug[+r.dataset.i].n; TN.rival = ""; TN.stat = r.dataset.st; TN.lineas[r.dataset.st] = +r.dataset.l; TN.sup = +r.dataset.sup; tnGuardar(); tenisMostrar();
-  }));
   caja.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
     navSalto(); const p = D.prox[+c.dataset.k]; TN.a = D.jug[p[0]].n; TN.b = D.jug[p[1]].n; TN.sup = p[9]; TN.sets = 3; tnGuardar();
     $("#tn_sup").value = String(TN.sup); tnCuerpo(); const res = $("#tn_res"); if (res) res.scrollIntoView({block: "start"});   // baja directo a las estadisticas del partido tocado, sin recorrer la lista de proximos
@@ -1272,6 +1278,17 @@ function tnComparar() {
   $("#tn_swap").addEventListener("click", () => { navSalto(); [TN.a, TN.b] = [TN.b, TN.a]; tnGuardar(); tnCuerpo(); });
   if (ia === undefined || ib === undefined || ia === ib) { $("#tn_res").innerHTML = '<p class="vacio">Elige dos jugadores distintos del mismo circuito.</p>'; return; }
   tnResultado();
+}
+function tnRecomendaciones() {             // pestaña propia: cada proximo partido con lo que cumplen sus jugadores (la pestaña Comparar queda como estaba)
+  const D = TN.datos, caja = $("#tn_cuerpo");
+  const {prox, bloques} = tnProxBloques();
+  const filaRec = (o, p) => { const j = D.jug[o.i]; return `<div class="av ir tn-rec" data-i="${o.i}" data-st="${o.k}" data-l="${o.l}" data-sup="${p[9]}"><b class="avc">${esc((j.nc || j.n).split(" ").pop().slice(0, 9))}</b><span>${esc(o.txt)}</span><em>${o.t.k}/${o.t.n} · ${Math.round(100 * o.t.k / o.t.n)}%</em></div>`; };
+  const chipDe = x => { const rs = tnRecsPartido(x.p); return `<div class="pcard">${tnChipTxt(x)}${rs.length ? rs.map(o => filaRec(o, x.p)).join("") : `<p class="av-vacio">Nada llega al 75 % todavía.</p>`}</div>`; };
+  caja.innerHTML = (prox.length ? `<p class="nota">Lo que cumple al menos el 75 % de los últimos 20 partidos de cada jugador (con la línea más exigente que siga siendo realista). Toca el partido para compararlo, o una recomendación para ver al jugador.</p>` + tnBloquesHtml(bloques, chipDe, "Recomendaciones por partido") : (tnProxDelCircuito().length ? `<p class="nota">No hay próximos partidos con ese filtro.</p>` : `<p class="vacio">No hay próximos partidos cargados.</p>`));
+  caja.querySelectorAll(".tn-rec").forEach(r => r.addEventListener("click", () => {
+    navSalto(); TN.sub = "jug"; TN.jug = D.jug[+r.dataset.i].n; TN.rival = ""; TN.stat = r.dataset.st; TN.lineas[r.dataset.st] = +r.dataset.l; TN.sup = +r.dataset.sup; tnGuardar(); tenisMostrar();
+  }));
+  caja.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => tnIrAPartido(+c.dataset.k)));
 }
 
 function tnResultado() {
@@ -1479,7 +1496,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261117172850";
+  const BUILD = "20261117225359";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
