@@ -1429,7 +1429,7 @@ function tnBarras() {
   function s_ok(x) { return (TN.sup < 0 || x.s === TN.sup) && (!TN.rival || x.riv === TN.rival); }
   d = d.slice(0, TN.n).reverse();                                       // cronologico: el ultimo a la derecha
   const cont = $("#tn_barras");
-  if (!d.length) { cont.innerHTML = '<p class="vacio">${def[3] ? "No hay partidos con estadísticas de saque con esos filtros (solo hay desde junio de 2026)." : "No hay partidos con marcador completo con esos filtros."}</p>'; return; }
+  if (!d.length) { cont.innerHTML = `<p class="vacio">${def[3] ? "No hay partidos con estadísticas de saque con esos filtros (las hay en todos los partidos copiados desde junio de 2026 y en parte de los de ATP desde 2024)." : "No hay partidos con marcador completo con esos filtros."}</p>`; return; }
   const vals = d.map(x => def[1](x)), max = Math.max(...vals, linea) * 1.15 + 1, alto = 200;
   const sup = vals.filter(v => v > linea).length, ig = vals.filter(v => v === linea).length;
   const barras = d.map((x, k) => {
@@ -1443,7 +1443,7 @@ function tnBarras() {
     <div class="tn-graf" style="height:${alto + 100}px"><div class="tn-linea" style="bottom:${top + 100}px"><span>Línea ${tnComa(linea)}</span></div>${barras}</div>
     <div class="tarjetas"><div class="tarjeta"><small>Supera la línea</small><b>${sup}/${d.length}</b><i>${Math.round(100 * sup / d.length)}%</i></div><div class="tarjeta"><small>Media</small><b>${tnFmt1(m)}</b></div><div class="tarjeta"><small>Mediana</small><b>${tnComa(med)}</b></div><div class="tarjeta"><small>Último partido</small><b>${vals[vals.length - 1]}</b></div></div>
     ${ig ? `<p class="nota">${ig} partido(s) exactamente igual a la línea (gris).</p>` : ""}
-    <p class="nota"><b class="tn-wlb g">G</b> / <b class="tn-wlb p">P</b> = ganó / perdió el partido. ${def[3] ? "Solo partidos con estadísticas de saque (desde junio de 2026, sin retiradas)." : "Solo partidos con marcador completo (sin retiradas)."} Pasa el dedo o el ratón por una barra para ver el partido.</p>`;
+    <p class="nota"><b class="tn-wlb g">G</b> / <b class="tn-wlb p">P</b> = ganó / perdió el partido. ${def[3] ? "Solo partidos con estadísticas de saque, sin retiradas (todos los copiados desde junio de 2026 y parte de los de ATP desde 2024)." : "Solo partidos con marcador completo (sin retiradas)."} Pasa el dedo o el ratón por una barra para ver el partido.</p>`;
 }
 
 document.querySelectorAll('input[name="dep"]').forEach(r => r.addEventListener("change", () => { navSalto(); ST.dep = r.value; cambiarVista(); }));
@@ -1461,7 +1461,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261117160728";
+  const BUILD = "20261117162202";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
