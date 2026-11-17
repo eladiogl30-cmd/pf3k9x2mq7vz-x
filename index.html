@@ -667,7 +667,7 @@ const refDe = (filas, g, sobre_) => {
   const med = n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2, media = v.reduce((a, b) => a + b, 0) / n;
   return sobre_ ? Math.max(med, media) : Math.min(med, media);
 };
-const lineaReal = (filas, g, l, sobre_) => { const ref = refDe(filas, g, sobre_); if (!Number.isFinite(ref)) return true; const tol = Math.max(1, (ref < 30 ? 0.1 : 0.05) * ref); return sobre_ ? l >= ref - tol : l <= ref + tol; };
+const lineaReal = (filas, g, l, sobre_) => { const ref = refDe(filas, g, sobre_); if (!Number.isFinite(ref)) return true; const tol = ref < 3 ? 0.5 : Math.max(1, (ref < 30 ? 0.1 : 0.05) * ref); return sobre_ ? l >= ref - tol : l <= ref + tol; };
 const rango = (a, b) => { const o = []; for (let x = a; x <= b + 1e-9; x += 1) o.push(x); return o; };
 
 // estadisticas de equipo para los destacados: nombre, como leerla de un partido (r = fila de L.FE) y las lineas a probar
@@ -1197,11 +1197,37 @@ function tnPropsJugador(i, s, b5, ls) {   // porcentajes de los ultimos 20 parti
   return {p, N, filas, media: tnMedia(p.map(x => x.tot)), mediaG: tnMedia(p.map(x => x.jg))};
 }
 
+// recomendaciones de un jugador para un partido proximo: lo que cumple >= 75 % de sus ultimos 20 partidos (los de la superficie del partido si hay >= 6), con la linea mas exigente que sigue siendo
+// cercana a lo que hace de media (misma regla que NBA y futbol: asi no sale "mas de 12,5 juegos" para quien juega 21)
+const TN_UMBRAL = 0.75;                    // en tenis hay pocos partidos recientes por jugador: se pide 75 % (en futbol y NBA 80 %)
+const TN_REC = [["tj", "juegos totales"], ["jg", "juegos ganados"], ["jc", "juegos del rival"], ["ns", "sets"], ["ac", "aces"], ["df", "dobles faltas"], ["acT", "aces del partido"], ["dfT", "dobles faltas del partido"], ["bpc", "bolas de break convertidas"]];
+function tnRecsJugador(i, sup) {
+  const todos = tnPartidos(i), out = [];
+  for (const [k, nombre] of TN_REC) {
+    const def = TN_STATS[k];
+    let filas = todos.filter(x => tnTieneStat(x, def));
+    const ms = sup >= 0 ? filas.filter(x => x.s === sup) : [];
+    filas = (ms.length >= 6 ? ms : filas).slice(0, 20);
+    if (filas.length < MIN_PART) continue;
+    const g = def[1]; let mejor = null;
+    for (let l = 0.5; l <= 45.5; l += 1) { if (!lineaReal(filas, g, l, true)) continue; const t = tasa(filas, sobre(g, l)); if (t.n >= MIN_PART && t.k / t.n >= TN_UMBRAL) mejor = {txt: `más de ${tnComa(l)} ${nombre}`, t, l, k}; }
+    if (!mejor) for (let l = 45.5; l >= 0.5; l -= 1) { if (!lineaReal(filas, g, l, false)) continue; const t = tasa(filas, bajo(g, l)); if (t.n >= MIN_PART && t.k / t.n >= TN_UMBRAL) mejor = {txt: `menos de ${tnComa(l)} ${nombre}`, t, l, k}; }
+    if (mejor) out.push({...mejor, i});
+  }
+  return out.sort((a, b) => b.t.k / b.t.n - a.t.k / a.t.n || b.t.n - a.t.n);
+}
+function tnRecsPartido(p) {                // hasta 6: alterna jugador 1 / jugador 2 empezando por lo mas seguro
+  const a = tnRecsJugador(p[0], p[9]), b = tnRecsJugador(p[1], p[9]), out = [];
+  for (let n = 0; out.length < 6 && (n < a.length || n < b.length); n++) { if (n < a.length && out.length < 6) out.push(a[n]); if (n < b.length && out.length < 6) out.push(b[n]); }
+  return out.sort((x, y) => y.t.k / y.t.n - x.t.k / x.t.n || y.t.n - x.t.n);
+}
+
 function tnComparar() {
   const D = TN.datos, ia = D.pos.get(TN.a), ib = D.pos.get(TN.b);
   const caja = $("#tn_cuerpo");
   const prox = tnProxFiltrados().sort((x, y) => x.p[6].localeCompare(y.p[6]) || (D.jug[y.p[0]].elo[0] + D.jug[y.p[1]].elo[0]) - (D.jug[x.p[0]].elo[0] + D.jug[x.p[1]].elo[0]));      // todos: por dia y, dentro del dia, los de mas nivel primero
-  const chipDe = ({p, k}) => `<button type="button" class="chip" data-k="${k}"><span class="chip-eq"><b>${esc(D.jug[p[0]].n)}</b><i>–</i><b>${esc(D.jug[p[1]].n)}</b></span><small>${tnDia(p[6])}${p[7] ? " " + esc(p[7]) : ""}</small>${p[9] >= 0 && p[9] <= 3 ? `<small class="tn-sup s${p[9]}">${TN_SUP[p[9]]}</small>` : ""}</button>`;
+  const filaRec = (o, p) => { const j = D.jug[o.i]; return `<div class="av ir tn-rec" data-i="${o.i}" data-st="${o.k}" data-l="${o.l}" data-sup="${p[9]}"><b class="avc">${esc((j.nc || j.n).split(" ").pop().slice(0, 9))}</b><span>${esc(o.txt)}</span><em>${o.t.k}/${o.t.n} · ${Math.round(100 * o.t.k / o.t.n)}%</em></div>`; };
+  const chipDe = ({p, k}) => { const rs = tnRecsPartido(p); return `<div class="pcard"><button type="button" class="chip" data-k="${k}"><span class="chip-eq"><b>${esc(D.jug[p[0]].n)}</b><i>–</i><b>${esc(D.jug[p[1]].n)}</b></span><small>${tnDia(p[6])}${p[7] ? " " + esc(p[7]) : ""}</small>${p[9] >= 0 && p[9] <= 3 ? `<small class="tn-sup s${p[9]}">${TN_SUP[p[9]]}</small>` : ""}</button>${rs.length ? rs.map(o => filaRec(o, p)).join("") : `<p class="av-vacio">Nada llega al 75 % todavía.</p>`}</div>`; };
   const grupos = new Map();                                                       // un bloque por torneo: ATP/WTA primero, luego Challenger, luego ITF; dentro, por dia y hora
   prox.forEach(x => { const t = x.p[8] || "Otros"; if (!grupos.has(t)) grupos.set(t, []); grupos.get(t).push(x); });
   const nivel = t => /Challenger/i.test(t) ? 1 : /^ITF/i.test(t) ? 2 : /^UTR/i.test(t) ? 3 : /^(ATP|WTA)/i.test(t) ? 0 : 1;
@@ -1215,6 +1241,9 @@ function tnComparar() {
   caja.innerHTML = campos;
   tnEnlazarCampo("tn_a", n => { if (TN.a !== n) navSalto(); TN.a = n; tnGuardar(); tnCuerpo(); });
   tnEnlazarCampo("tn_b", n => { if (TN.b !== n) navSalto(); TN.b = n; tnGuardar(); tnCuerpo(); });
+  caja.querySelectorAll(".tn-rec").forEach(r => r.addEventListener("click", () => {
+    navSalto(); TN.sub = "jug"; TN.jug = D.jug[+r.dataset.i].n; TN.rival = ""; TN.stat = r.dataset.st; TN.lineas[r.dataset.st] = +r.dataset.l; TN.sup = +r.dataset.sup; tnGuardar(); tenisMostrar();
+  }));
   caja.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
     navSalto(); const p = D.prox[+c.dataset.k]; TN.a = D.jug[p[0]].n; TN.b = D.jug[p[1]].n; TN.sup = p[9]; TN.sets = 3; tnGuardar();
     $("#tn_sup").value = String(TN.sup); tnCuerpo(); const res = $("#tn_res"); if (res) res.scrollIntoView({block: "start"});   // baja directo a las estadisticas del partido tocado, sin recorrer la lista de proximos
@@ -1432,7 +1461,7 @@ cambiarVista();
 // Si el movil trae una copia vieja de la pagina (la cache de GitHub Pages dura 10 min y Telegram/Chrome guardan la suya), pregunta a version.json (pesa unos bytes, siempre fresco)
 // y, si hay una version nueva, recarga con ?v=<version> para saltarse la cache.
 (async () => {
-  const BUILD = "20261117155711";
+  const BUILD = "20261117160728";
   if (!/^\d{8,}$/.test(BUILD)) return;
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache: "no-store"}), j = await r.json();
